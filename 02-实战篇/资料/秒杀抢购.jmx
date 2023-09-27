@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.4.1">
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.3">
   <hashTree>
     <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="黑马点评" enabled="true">
       <stringProp name="TestPlan.comments"></stringProp>
@@ -121,7 +121,7 @@
             <collectionProp name="HeaderManager.headers">
               <elementProp name="" elementType="Header">
                 <stringProp name="Header.name">authorization</stringProp>
-                <stringProp name="Header.value">d2680e6c154746a9adf6cf9f4be3a34e</stringProp>
+                <stringProp name="Header.value">eyJhbGciOiJIUzUxMiIsInppcCI6IkdaSVAifQ.H4sIAAAAAAAAAKtWKi5NUrJS8vB1CVDSUUqtKFCyMjSzNLUwNDA0NtNRKi1OLfJMAYoZGBroKBVk5OelAlUbmhubGJqbGBqaWyjVAgBkTNO7QwAAAA.CLZEXxoYCITdi-ABXXzwNVnrHtUUlfVBPyzsyf4nLODw81fIjGNTrHt455pQXVF5ZZjJgQFseBnVGtPryuGy3A</stringProp>
               </elementProp>
             </collectionProp>
           </HeaderManager>

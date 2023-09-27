@@ -534,7 +534,7 @@ public Result queryShopById(@PathVariable("id") Long id) {
 }
 ```
 
-#### 2.2.1 、缓存模型和思路
+#### 2.2.1、缓存模型和思路
 
 标准的操作方式就是查询数据库之前先查询缓存，如果缓存数据存在，则直接从缓存中返回，如果缓存数据不存在，再查询数据库，然后将数据存入redis。
 
@@ -1576,47 +1576,62 @@ public Result queryById(Long id) {
 
 ![1653363100502](image\Redis实战篇.assets\1653363100502.png)
 
+<img src="image/Redis实战篇.assets/image-20230926155729468.png" alt="image-20230926155729468" style="zoom:50%;" />
+
+> - UUID	MySQL8.0以后，UUID可以自增且减少了存储空间
+> - Redis自增
+> - snowflake算法     依赖于系统时间，需要机器间的时间一致
+> - 数据库自增     专门弄一个数据库表用于自增id的获取，类似Redis，但是性能差于redis
+
 为了增加ID的安全性，我们可以不直接使用Redis自增的数值，而是拼接一些其它信息：
 
-![1653363172079](image\Redis实战篇.assets\1653363172079.png)ID的组成部分：符号位：1bit，永远为0
+**Redis自增做全局唯一ID：**
 
-时间戳：31bit，以秒为单位，可以使用69年
+![1653363172079](image\Redis实战篇.assets\1653363172079.png)ID的
 
-序列号：32bit，秒内的计数器，支持每秒产生2^32个不同ID
+- 组成部分：符号位：1bit，永远为0
+- 时间戳：31bit，以秒为单位，可以使用69年
+
+- 序列号：32bit，秒内的计数器，支持每秒产生2^32^个不同ID
+
 
 ### 3.2 -Redis实现全局唯一Id
 
 ```java
 @Component
 public class RedisIdWorker {
+    
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
     /**
      * 开始时间戳
      */
-    private static final long BEGIN_TIMESTAMP = 1640995200L;
+    public static final long BEGIN_TIMESTAMP = 1640995299L;//2021年1月1日时间戳
+
     /**
      * 序列号的位数
      */
-    private static final int COUNT_BITS = 32;
+    public static final int COUNT_BITS = 32;
 
-    private StringRedisTemplate stringRedisTemplate;
-
-    public RedisIdWorker(StringRedisTemplate stringRedisTemplate) {
-        this.stringRedisTemplate = stringRedisTemplate;
-    }
-
+    /**
+     * 雪花算法实现，1位符号位 + 31位时间戳 + 32位序列号
+     * @param keyPrefix
+     * @return
+     */
     public long nextId(String keyPrefix) {
-        // 1.生成时间戳
+        //1 生成时间戳
         LocalDateTime now = LocalDateTime.now();
         long nowSecond = now.toEpochSecond(ZoneOffset.UTC);
         long timestamp = nowSecond - BEGIN_TIMESTAMP;
-
-        // 2.生成序列号
-        // 2.1.获取当前日期，精确到天
+        
+        //2 生成序列号
+        //2.1 获取当前日期，精确到天
         String date = now.format(DateTimeFormatter.ofPattern("yyyy:MM:dd"));
-        // 2.2.自增长
+        //2.2 自增长
         long count = stringRedisTemplate.opsForValue().increment("icr:" + keyPrefix + ":" + date);
 
-        // 3.拼接并返回
+        //拼接并返回
         return timestamp << COUNT_BITS | count;
     }
 }
@@ -1639,6 +1654,10 @@ CountDownLatch 中有两个最重要的方法
 await 方法 是阻塞方法，我们担心分线程没有执行完时，main线程就先执行，所以使用await可以让main线程阻塞，那么什么时候main线程不再阻塞呢？当CountDownLatch  内部维护的 变量变为0时，就不再阻塞，直接放行，那么什么时候CountDownLatch   维护的变量变为0 呢，我们只需要调用一次countDown ，内部变量就减少1，我们让分线程和变量绑定， 执行完一个分线程就减少一个变量，当分线程全部走完，CountDownLatch 维护的变量就是0，此时await就不再阻塞，统计出来的时间也就是所有分线程执行完后的时间。
 
 ```java
+@Resource
+private RedisIdWorker redisIdWorker;
+    
+private ExecutorService threadPool = Executors.newFixedThreadPool(500);
 @Test
 void testIdWorker() throws InterruptedException {
     CountDownLatch latch = new CountDownLatch(300);
@@ -1715,6 +1734,29 @@ public void addSeckillVoucher(Voucher voucher) {
 }
 ```
 
+
+
+使用工具保存一个优惠券
+
+POST：http://localhost:8081/voucher/seckill
+
+```
+{
+  "shopId": 1,
+  "title": "100元代金券",
+  "subTitle": "周一至周五均可使用",
+  "rules": "全场通用\\n无需预约\\n仅限堂食",
+  "payValue": 8000,
+  "actualValue": 10000,
+  "type": 1,
+  "stock": 100,
+  "beginTime": "2023-09-26T10:09:17",
+  "endTime": "2023-10-26T23:09:04" 
+}
+```
+
+
+
 ### 3.4 实现秒杀下单
 
 下单核心思路：当我们点击抢购时，会触发右侧的请求，我们只需要编写对应的controller即可
@@ -1740,6 +1782,7 @@ VoucherOrderServiceImpl
 
 ```java
 @Override
+@Transactional
 public Result seckillVoucher(Long voucherId) {
     // 1.查询优惠券
     SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
@@ -1861,6 +1904,10 @@ boolean success = seckillVoucherService.update()
             .eq("voucher_id", voucherId).update().gt("stock",0); //where id = ? and stock > 0
 ```
 
+**测试：**
+
+使用jemeter，200线程，POST：http://localhost:8081/voucher-order/seckill/7
+
 **知识小扩展：**
 
 针对cas中的自旋压力过大，我们可以使用Longaddr这个类去解决
@@ -1875,7 +1922,7 @@ Java8 提供的一个对AtomicLong改进后的一个类，LongAdder
 
 ![1653370271627](image\Redis实战篇.assets\1653370271627.png)
 
-### 3.6 优惠券秒杀-一人一单
+### 3.6 单机优惠券秒杀-一人一单
 
 需求：修改秒杀业务，要求同一个优惠券，一个用户只能下一单
 
@@ -1892,8 +1939,8 @@ VoucherOrderServiceImpl
 **初步代码：增加一人一单逻辑**
 
 ```java
-
 @Override
+@Transactional
 public Result seckillVoucher(Long voucherId) {
     // 1.查询优惠券
     SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
@@ -1990,7 +2037,7 @@ public synchronized Result createVoucherOrder(Long voucherId) {
 ```
 
 ，但是这样添加锁，锁的粒度太粗了，在使用锁过程中，控制**锁粒度** 是一个非常重要的事情，因为如果锁的粒度太大，会导致每个线程进来都会锁住，所以我们需要去控制锁的粒度，以下这段代码需要修改为：
-intern() 这个方法是从常量池中拿到数据，如果我们直接使用userId.toString() 他拿到的对象实际上是不同的对象，new出来的对象，我们使用锁必须保证锁必须是同一把，所以我们需要使用intern()方法
+intern() 这个方法是从常量池中拿到数据，如果我们直接使用userId.toString() 他拿到的对象实际上是不同的对象，new出来的对象，我们使用锁必须保证锁必须是同一把，所以我们需要使用**intern()**方法
 
 ```java
 @Transactional
@@ -2032,17 +2079,51 @@ public  Result createVoucherOrder(Long voucherId) {
 }
 ```
 
-但是以上代码还是存在问题，问题的原因在于当前方法被spring的事务控制，如果你在方法内部加锁，可能会导致当前方法事务还没有提交，但是锁已经释放也会导致问题，所以我们选择将当前方法整体包裹起来，确保事务不会出现问题：如下：
+但是以上代码还是存在问题，问题的原因在于当前方法被spring的事务控制，**如果你在方法内部加锁，可能会导致当前方法事务还没有提交，但是锁已经释放，其它用户获得到锁时事务还未提交，导致数据库中并没有插入订单**，也会导致问题，所以我们选择将当前方法整体包裹起来，确保事务不会出现问题：如下：
 
-在seckillVoucher 方法中，添加以下逻辑，这样就能保证事务的特性，同时也控制了锁的粒度
+在seckillVoucher 方法中，添加以下逻辑，这样就能保证事务的特性，同时也控制了锁的粒度，**去掉secKillVoucher中的@Transactional注解**
 
-![1653373434815](image\Redis实战篇.assets\1653373434815.png)
+```java
+Long userId = UserHolder.getUser().getId();
+synchronized (userId.toString().intern()) {
+    return this.createVoucherOrder(voucherId);
+}
+```
 
-但是以上做法依然有问题，因为你调用的方法，其实是this.的方式调用的，事务想要生效，还得利用代理来生效，所以这个地方，我们需要获得原始的事务对象， 来操作事务
+但是以上做法依然有问题，因为你调用的方法，其实是this.的方式调用的，**事务想要生效，还得利用代理来生效**，所以这个地方，我们需要获得原始的事务对象，来操作事务
 
-![1653383810643](image\Redis实战篇.assets\1653383810643.png)
+```java
+Long userId = UserHolder.getUser().getId();
+synchronized (userId.toString().intern()) {
+    IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+    //需要使用代理来调用方法，否则会造成事务失效（这里是造成Spring事务失效的场景之一）
+    return proxy.createVoucherOrder(voucherId);
+}
+```
+
+然后在接口IVoucherOrderService中**创建一个抽象方法createVoucherOrder(Long voucherId)**
+
+还需要引入依赖：
+
+```xml
+<dependency>
+    <groupId>org.aspectj</groupId>
+    <artifactId>aspectjweaver</artifactId>
+</dependency>
+```
+
+以及在启动类上添加 **@EnableAspectJAutoProxy(exposeProxy = true)** 注解
 
 
+
+> 本节**亮点**：
+>
+> - 乐观锁解决超卖（减库存时额外判断是否大于0）
+> - synchronized解决单机模式下一人一单
+>   - synchronized锁到方法外面，因为@Transactional使方法完成时才会提交事务，锁方法体可能会出现线程安全问题
+>   - 使用userId.toString().intern()方法减小锁粒度
+>   - 使用AopContext.currentProxy()获取代理调用方法解决事务失效
+>   - 但是集群模式下，synchronized是本地锁，需要更换悲观锁方案，改为分布式锁
 
 ### 3.7 集群环境下的并发问题
 
@@ -2068,7 +2149,7 @@ public  Result createVoucherOrder(Long voucherId) {
 
 ### 4.1 、基本原理和实现方式对比
 
-分布式锁：满足分布式系统或集群模式下多进程可见并且互斥的锁。
+分布式锁：满足分布式系统或集群模式下多**进程可见并且互斥**的锁。
 
 分布式锁的核心思想就是让大家都使用同一把锁，只要大家使用的是同一把锁，那么我们就能锁住线程，不让线程进行，让程序串行执行，这就是分布式锁的核心思路
 
@@ -2076,15 +2157,16 @@ public  Result createVoucherOrder(Long voucherId) {
 
 那么分布式锁他应该满足一些什么样的条件呢？
 
-可见性：多个线程都能看到相同的结果，注意：这个地方说的可见性并不是并发编程中指的内存可见性，只是说多个进程之间都能感知到变化的意思
+- 可见性：多个线程都能看到相同的结果，注意：这个地方说的可见性并不是并发编程中指的内存可见性，只是说多个进程之间都能感知到变化的意思
 
-互斥：互斥是分布式锁的最基本的条件，使得程序串行执行
+- 互斥：互斥是分布式锁的最基本的条件，使得程序串行执行
 
-高可用：程序不易崩溃，时时刻刻都保证较高的可用性
+- 高可用：程序不易崩溃，时时刻刻都保证较高的可用性
 
-高性能：由于加锁本身就让性能降低，所有对于分布式锁本身需要他就较高的加锁性能和释放锁性能
+- 高性能：由于加锁本身就让性能降低，所有对于分布式锁本身需要他就较高的加锁性能和释放锁性能
 
-安全性：安全也是程序中必不可少的一环
+- 安全性：安全也是程序中必不可少的一环
+
 
 
 
@@ -2092,11 +2174,12 @@ public  Result createVoucherOrder(Long voucherId) {
 
 常见的分布式锁有三种
 
-Mysql：mysql本身就带有锁机制，但是由于mysql性能本身一般，所以采用分布式锁的情况下，其实使用mysql作为分布式锁比较少见
+1. Mysql：mysql本身就带有锁机制，但是由于mysql性能本身一般，所以采用分布式锁的情况下，其实使用mysql作为分布式锁比较少见
 
-Redis：redis作为分布式锁是非常常见的一种使用方式，现在企业级开发中基本都使用redis或者zookeeper作为分布式锁，利用setnx这个方法，如果插入key成功，则表示获得到了锁，如果有人插入成功，其他人插入失败则表示无法获得到锁，利用这套逻辑来实现分布式锁
+2. Redis：redis作为分布式锁是非常常见的一种使用方式，现在企业级开发中基本都使用redis或者zookeeper作为分布式锁，利用setnx这个方法，如果插入key成功，则表示获得到了锁，如果有人插入成功，其他人插入失败则表示无法获得到锁，利用这套逻辑来实现分布式锁
 
-Zookeeper：zookeeper也是企业级开发中较好的一个实现分布式锁的方案，由于本套视频并不讲解zookeeper的原理和分布式锁的实现，所以不过多阐述
+3. Zookeeper：zookeeper也是企业级开发中较好的一个实现分布式锁的方案，由于本套视频并不讲解zookeeper的原理和分布式锁的实现，所以不过多阐述
+
 
 ![1653382219377](image\Redis实战篇.assets\1653382219377.png)
 

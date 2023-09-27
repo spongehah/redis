@@ -38,7 +38,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-    
+
     @Resource
     private RedisCacheHelper redisCacheHelper;
 
@@ -54,25 +54,25 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
          * 互斥锁解决缓存击穿
          */
         // return queryWithMutex(id);
-        
-        //使用封装好的工具类
-        // Shop shop = redisCacheHelper.queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById,
-        //         RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
-        // if (shop == null) {
-        //     return Result.fail("店铺信息不存在！");
-        // } 
-        // return Result.ok(shop);
+
+        // 使用封装好的工具类 缓存穿透
+        Shop shop = redisCacheHelper.queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById,
+                RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        if (shop == null) {
+            return Result.fail("店铺信息不存在！");
+        }
+        return Result.ok(shop);
 
 
         /**
          * 逻辑过期解决缓存击穿
          */
         // return queryWithLogicalExpire(id);
-        Shop shop =  redisCacheHelper.queryWithLogicalExpire(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, 20L, TimeUnit.SECONDS, RedisConstants.LOCK_SHOP_KEY);
+       /* Shop shop =  redisCacheHelper.queryWithLogicalExpire(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, 20L, TimeUnit.SECONDS, RedisConstants.LOCK_SHOP_KEY);
         if (shop == null) {
             return Result.fail("店铺信息不存在！");
         }
-        return Result.ok(shop);
+        return Result.ok(shop);*/
     }
 
     /**
