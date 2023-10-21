@@ -1233,6 +1233,8 @@ public Shop queryWithLogicalExpire( Long id ) {
 将逻辑进行封装
 
 ```java
+package com.hmdp.utils;
+
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
@@ -1261,6 +1263,12 @@ import java.util.function.Function;
  *     <artifactId>hutool-all</artifactId>
  *     <version>5.7.17</version>
  * </dependency>
+ * 
+ * @Data
+ * public class RedisData {
+ *     private LocalDateTime expireTime;
+ *     private Object data;
+ * }
  * 
  * @author spongehah from hut
  * @since 2023-09-24
@@ -1405,7 +1413,16 @@ public class RedisCacheHelper {
         boolean isLock = this.tryLock(lockKey);
         // TODO 6.2 判断是否获取锁成功
         if (isLock) {
-            // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
+            // TODO 可以在这里再进行一个double check，如果redis缓存依旧是过期的，才进行缓存重建
+            String jsonAgain = stringRedisTemplate.opsForValue().get(key);
+            RedisData redisDataAgain = JSONUtil.toBean(jsonAgain, RedisData.class);
+            JSONObject jsonObjectAgain = (JSONObject) redisDataAgain.getData();
+            R rAgain = JSONUtil.toBean(jsonObjectAgain, type);
+            LocalDateTime expireTimeAgain = redisDataAgain.getExpireTime();
+            if (expireTimeAgain.isAfter(LocalDateTime.now())) {
+                this.unlock(lockKey);
+                return rAgain;
+            }
             // TODO 6.3 成功，开启独立线程，实现缓存重建你
             CompletableFuture.runAsync(() -> {
                 try {
@@ -1478,11 +1495,16 @@ public class RedisCacheHelper {
         }
         try {
             // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
-
+            String json = stringRedisTemplate.opsForValue().get(key);
+            if (StrUtil.isNotBlank(json)) {
+                R r = JSONUtil.toBean(json, type);
+                return r;
+            }
+            if (json != null) {
+                return null;
+            }
             // TODO 4.4 成功，根据id查询数据库
             R r = dbFallback.apply(id);
-            // 模拟缓存击穿重建业务耗时久情况
-            Thread.sleep(200);
             // 5 数据库不存在，返回错误
             if (r == null) {
                 /**
@@ -1496,14 +1518,18 @@ public class RedisCacheHelper {
 
             // 7 存在，返回数据
             return r;
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         } finally {
             // TODO 7 释放互斥锁
             this.unlock(lockKey);
         }
     }
 
+    /**
+     * 简单的分布式锁实现方案
+     * 以setnx命令作为互斥，以ttl过期时间作为安全性保证，安全性较低
+     * @param key
+     * @return
+     */
     //互斥锁简单实现，获得锁，queryWithLogicalExpire和queryWithMutex方法内调用
     private boolean tryLock(String key) {
         Boolean isLock = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10L, TimeUnit.SECONDS);
@@ -1557,7 +1583,7 @@ public Result queryById(Long id) {
 
 ## 3、优惠卷秒杀
 
-### 3.1 -全局唯一ID
+### 3.1 -**全局唯一ID**
 
 每个店铺都可以发布优惠券：
 
@@ -1826,7 +1852,7 @@ public Result seckillVoucher(Long voucherId) {
 }
 ```
 
-### 3.5 库存超卖问题分析
+### 3.5 **库存超卖**问题分析
 
 有关超卖问题分析：在我们原有代码中是这么写的
 
@@ -1922,7 +1948,7 @@ Java8 提供的一个对AtomicLong改进后的一个类，LongAdder
 
 ![1653370271627](image\Redis实战篇.assets\1653370271627.png)
 
-### 3.6 单机优惠券秒杀-一人一单
+### 3.6 单机优惠券秒杀-**一人一单**
 
 需求：修改秒杀业务，要求同一个优惠券，一个用户只能下一单
 
@@ -2145,7 +2171,7 @@ synchronized (userId.toString().intern()) {
 
 ![1653374044740](image\Redis实战篇.assets\1653374044740.png)
 
-## 4、分布式锁
+## 4、分布式锁-setnx
 
 ### 4.1 、基本原理和实现方式对比
 
@@ -2191,6 +2217,9 @@ synchronized (userId.toString().intern()) {
 
   * 互斥：确保只能有一个线程获取锁
   * 非阻塞：尝试一次，成功返回true，失败返回false
+  * setnx和expire合并为一个语句，避免只执行setnx后宕机
+
+  <img src="image/Redis实战篇.assets/image-20230927104013694.png" alt="image-20230927104013694" style="zoom: 70%;" />
 
 * 释放锁：
 
@@ -2203,7 +2232,7 @@ synchronized (userId.toString().intern()) {
 
 我们利用redis 的setNx 方法，当有多个线程进入时，我们就利用该方法，第一个线程进入时，redis 中就有这个key 了，返回了1，如果结果是1，则表示他抢到了锁，那么他去执行业务，然后再删除锁，退出锁逻辑，没有抢到锁的哥们，等待一定时间后重试即可
 
- ![1653382830810](image\Redis实战篇.assets\1653382830810.png)
+ <img src="image/Redis实战篇.assets/image-20230927104437637.png" alt="image-20230927104437637" style="zoom:50%;float:left" /><img src="image\Redis实战篇.assets\1653382830810.png" alt="1653382830810" style="zoom: 67%;" />
 
 ### 4.3 实现分布式锁版本一
 
@@ -2211,22 +2240,43 @@ synchronized (userId.toString().intern()) {
 
 **锁的基本接口**
 
-![1656079017728](image\Redis实战篇.assets\1656079017728.png)
+```java
+public interface ILock {
+
+    /**
+     * 尝试获取锁
+     * @param timeoutSec 锁持有的超时时间（秒），过期后自动释放
+     * @return true代表获取锁成功；false代表获取锁失败
+     */
+    boolean tryLock(Long timeoutSec);
+
+    /**
+     * 释放锁
+     */
+    void unlock();
+}
+```
 
 **SimpleRedisLock**
 
 利用setnx方法进行加锁，同时增加过期时间，防止死锁，此方法可以保证加锁和增加过期时间具有原子性
 
 ```java
-private static final String KEY_PREFIX="lock:"
+public static final String KEY_PREFIX = "lock:";
+private String name;
+private StringRedisTemplate stringRedisTemplate;
+
+public SimpleRedisLock(String name, StringRedisTemplate stringRedisTemplate) {
+    this.name = name;
+    this.stringRedisTemplate = stringRedisTemplate;
+}
+
 @Override
-public boolean tryLock(long timeoutSec) {
-    // 获取线程标示
-    String threadId = Thread.currentThread().getId()
+public boolean tryLock(Long timeoutSec) {
     // 获取锁
-    Boolean success = stringRedisTemplate.opsForValue()
-            .setIfAbsent(KEY_PREFIX + name, threadId + "", timeoutSec, TimeUnit.SECONDS);
-    return Boolean.TRUE.equals(success);
+    long threadID = Thread.currentThread().getId();
+    Boolean success = stringRedisTemplate.opsForValue().setIfAbsent(KEY_PREFIX + name, threadID + "", timeoutSec, TimeUnit.SECONDS);
+    return BooleanUtil.isTrue(success);
 }
 ```
 
@@ -2246,46 +2296,58 @@ public void unlock() {
 * 修改业务代码
 
 ```java
-  @Override
-    public Result seckillVoucher(Long voucherId) {
-        // 1.查询优惠券
+ @Override
+    public Result secKillVoucher(Long voucherId) {
+        //1 查询优惠券
         SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
-        // 2.判断秒杀是否开始
+        //2 判断秒杀是否开始
         if (voucher.getBeginTime().isAfter(LocalDateTime.now())) {
-            // 尚未开始
             return Result.fail("秒杀尚未开始！");
         }
-        // 3.判断秒杀是否已经结束
+        //3 判断秒杀是否结束
         if (voucher.getEndTime().isBefore(LocalDateTime.now())) {
-            // 尚未开始
             return Result.fail("秒杀已经结束！");
         }
-        // 4.判断库存是否充足
+        //4 判断库存是否充足
         if (voucher.getStock() < 1) {
-            // 库存不足
             return Result.fail("库存不足！");
         }
+
         Long userId = UserHolder.getUser().getId();
-        //创建锁对象(新增代码)
-        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
-        //获取锁对象
-        boolean isLock = lock.tryLock(1200);
-		//加锁失败
-        if (!isLock) {
-            return Result.fail("不允许重复下单");
-        }
-        try {
-            //获取代理对象(事务)
+        /*synchronized (userId.toString().intern()) {
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+            //需要使用代理来调用方法，否则会造成事务失效（这里是造成Spring事务失效的场景之一）
+            return proxy.createVoucherOrder(voucherId);
+        }*/
+
+        /**
+         * 集群模式下使用分布式锁
+         */
+        // 创建锁对象
+        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        // 获取锁
+        boolean isLock = lock.tryLock(10L);
+        // 判断锁是否获取成功
+        if (!isLock) {
+            // 失败，返回错误信息
+            return Result.fail("不允许重复下单！");
+        }
+        
+        // 成功，执行业务
+        try {
+            IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+            //需要使用代理来调用方法，否则会造成事务失效（这里是造成Spring事务失效的场景之一）
             return proxy.createVoucherOrder(voucherId);
         } finally {
-            //释放锁
+            // 释放锁
             lock.unlock();
         }
     }
 ```
 
-### 4.4 Redis分布式锁误删情况说明
+> 但这种简单的分布式锁实现方式，仍然可能出现问题，如下说明
+
+### 4.4 Redis分布式锁**误删**情况说明
 
 逻辑说明：
 
@@ -2309,33 +2371,44 @@ public void unlock() {
 
 ![1653387398820](image\Redis实战篇.assets\1653387398820.png)
 
-具体代码如下：加锁
+具体代码如下：
 
 ```java
-private static final String ID_PREFIX = UUID.randomUUID().toString(true) + "-";
-@Override
-public boolean tryLock(long timeoutSec) {
-   // 获取线程标示
-   String threadId = ID_PREFIX + Thread.currentThread().getId();
-   // 获取锁
-   Boolean success = stringRedisTemplate.opsForValue()
-                .setIfAbsent(KEY_PREFIX + name, threadId, timeoutSec, TimeUnit.SECONDS);
-   return Boolean.TRUE.equals(success);
-}
-```
+public class SimpleRedisLock implements ILock{
+    
+    public static final String KEY_PREFIX = "lock:";
+    /**
+     * 使用public static final的UUID作为JVM的区分，同一个JVM获取到的SimpleRedisLock实例ID_PREFIX相同
+     * 用于作为锁的value的前缀，避免不同JVM下threadId相同的情况下锁被别的线程误删
+     */
+    public static final String ID_PREFIX = UUID.randomUUID().toString(true) + "-";
+    private String name;
+    private StringRedisTemplate stringRedisTemplate;
 
-释放锁
+    public SimpleRedisLock(String name, StringRedisTemplate stringRedisTemplate) {
+        this.name = name;
+        this.stringRedisTemplate = stringRedisTemplate;
+    }
 
-```java
-public void unlock() {
-    // 获取线程标示
-    String threadId = ID_PREFIX + Thread.currentThread().getId();
-    // 获取锁中的标示
-    String id = stringRedisTemplate.opsForValue().get(KEY_PREFIX + name);
-    // 判断标示是否一致
-    if(threadId.equals(id)) {
-        // 释放锁
-        stringRedisTemplate.delete(KEY_PREFIX + name);
+    @Override
+    public boolean tryLock(Long timeoutSec) {
+        // 获取锁
+        String threadID = ID_PREFIX + Thread.currentThread().getId();
+        Boolean success = stringRedisTemplate.opsForValue().setIfAbsent(KEY_PREFIX + name, threadID, timeoutSec, TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(success);
+    }
+
+    @Override
+    public void unlock() {
+        //获取线程标识
+        String threadId = ID_PREFIX + Thread.currentThread().getId();
+        //获取锁中的标识（value）
+        String id = stringRedisTemplate.opsForValue().get(KEY_PREFIX + name);
+        //判断标识是否一致
+        if (threadId.equals(id)) {
+            //释放锁
+            stringRedisTemplate.delete(KEY_PREFIX + name);
+        }
     }
 }
 ```
@@ -2352,7 +2425,7 @@ public void unlock() {
 
 ![1653387764938](image\Redis实战篇.assets\1653387764938.png)
 
-### 4.7 Lua脚本解决多条命令原子性问题
+### 4.7 **Lua脚本**解决多条命令原子性问题
 
 Redis提供了Lua脚本功能，在一个脚本中编写多条Redis命令，确保多条命令执行时的原子性。Lua是一种编程语言，它的基本语法大家可以参考网站：https://www.runoob.com/lua/lua-tutorial.html，这里重点介绍Redis提供的调用函数，我们可以使用lua去操作redis，又能保证他的原子性，这样就可以实现拿锁比锁删锁是一个原子性动作了，作为Java程序员这一块并不作一个简单要求，并不需要大家过于精通，只需要知道他有什么作用即可。
 
@@ -2439,6 +2512,9 @@ private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
         UNLOCK_SCRIPT.setResultType(Long.class);
     }
 
+/**
+ * 使用lua脚本保证比锁删锁的原子性
+ */
 public void unlock() {
     // 调用lua脚本
     stringRedisTemplate.execute(
@@ -2446,19 +2522,121 @@ public void unlock() {
             Collections.singletonList(KEY_PREFIX + name),
             ID_PREFIX + Thread.currentThread().getId());
 }
-经过以上代码改造后，我们就能够实现 拿锁比锁删锁的原子性动作了~
+//经过以上代码改造后，我们就能够实现 拿锁比锁删锁的原子性动作了~
 ```
 
-小总结：
+全部代码
+
+```java
+/**
+ * Redis分布式锁setnx实现，适用于大多数情况，解决了误删锁问题和原子性问题
+ * 但还存在以下问题：
+ *      重入问题
+ *      不可重试
+ *      超时释放
+ *      主从一致性
+ * 如需解决这些极低概率问题，请使用Redisson
+ * 
+ *  <!--hutool-->
+ *  <dependency>
+ *      <groupId>cn.hutool</groupId>
+ *      <artifactId>hutool-all</artifactId>
+ *      <version>5.7.17</version>
+ *  </dependency>
+ *  
+ *  public interface ILock {
+ *      /**
+ *      * 尝试获取锁
+ *      * @param timeoutSec 锁持有的超时时间（秒），过期后自动释放
+ *      * @return true代表获取锁成功；false代表获取锁失败
+ *      * /
+ *      boolean tryLock(Long timeoutSec);
+ *      /**
+ *      * 释放锁
+ *      * /
+ *      void unlock();
+ *  }
+ */
+public class SimpleRedisLock implements ILock{
+    public static final String KEY_PREFIX = "lock:";
+    /**
+     * 使用public static final的UUID作为JVM的区分，同一个JVM获取到的SimpleRedisLock实例ID_PREFIX相同
+     * 用于作为锁的value的前缀，避免不同JVM下threadId相同的情况下锁被别的线程误删
+     */
+    public static final String ID_PREFIX = UUID.randomUUID().toString(true) + "-";
+    private String name;
+    private StringRedisTemplate stringRedisTemplate;
+
+    public SimpleRedisLock(String name, StringRedisTemplate stringRedisTemplate) {
+        this.name = name;
+        this.stringRedisTemplate = stringRedisTemplate;
+    }
+
+    //初始化lua脚本，避免重复初始化
+    public static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
+    static {
+        UNLOCK_SCRIPT = new DefaultRedisScript<>();
+        UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
+        UNLOCK_SCRIPT.setResultType(Long.class);
+    }
+
+    @Override
+    public boolean tryLock(Long timeoutSec) {
+        // 获取锁
+        /**
+         * UUID用于区分JVM，threadId用于区分同一个JVM内的不同线程
+         * UUID保证不同JVM内相同userId和相同ThreadId的线程拿到锁
+         * threadId保证同一个JVM内相同userId的线程拿到锁
+         */
+        String threadID = ID_PREFIX + Thread.currentThread().getId();
+        Boolean success = stringRedisTemplate.opsForValue().setIfAbsent(KEY_PREFIX + name, threadID, timeoutSec, TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(success);
+    }
+
+    /**
+     * 使用lua脚本保证比锁删锁的原子性
+     */
+    @Override
+    public void unlock() {
+        //调用lua脚本
+        stringRedisTemplate.execute(
+                UNLOCK_SCRIPT,
+                Collections.singletonList(KEY_PREFIX + name),
+                ID_PREFIX + Thread.currentThread().getId()
+        );
+    }
+
+    /**
+     * 下面方法还存在比锁和释放锁之间的原子性问题
+     * 所以采用lua脚本实现原子性操作，因为调用lua脚本只需要一行代码
+     */
+    /*@Override
+    public void unlock() {
+        //获取线程标识
+        String threadId = ID_PREFIX + Thread.currentThread().getId();
+        //获取锁中的标识（value）
+        String id = stringRedisTemplate.opsForValue().get(KEY_PREFIX + name);
+        //判断标识是否一致
+        if (threadId.equals(id)) {
+            //释放锁
+            stringRedisTemplate.delete(KEY_PREFIX + name);
+        }
+    }*/
+}
+```
+
+
+
+### 小总结
 
 基于Redis的分布式锁实现思路：
 
 * 利用set nx ex获取锁，并设置过期时间，保存线程标示
 * 释放锁时先判断线程标示是否与自己一致，一致则删除锁
   * 特性：
-    * 利用set nx满足互斥性
-    * 利用set ex保证故障时锁依然能释放，避免死锁，提高安全性
-    * 利用Redis集群保证高可用和高并发特性
+    * 利用set nx满足**互斥性**
+    * 利用set ex保证故障时锁依然能释放，**避免死锁**，提高安全性
+    * 利用Redis集群保证**高可用和高并发特性**
 
 笔者总结：我们一路走来，利用添加过期时间，防止死锁问题的发生，但是有了过期时间之后，可能出现误删别人锁的问题，这个问题我们开始是利用删之前 通过拿锁，比锁，删锁这个逻辑来解决的，也就是删之前判断一下当前这把锁是否是属于自己的，但是现在还有原子性问题，也就是我们没法保证拿锁比锁删锁是一个原子性的动作，最后通过lua表达式来解决这个问题
 
@@ -2468,7 +2646,9 @@ public void unlock() {
 
 第一个线程进来，得到了锁，手动删除锁，模拟锁超时了，其他线程会执行lua来抢锁，当第一天线程利用lua删除锁时，lua能保证他不能删除他的锁，第二个线程删除锁时，利用lua同样可以保证不会删除别人的锁，同时还能保证原子性。
 
-## 5、分布式锁-redission
+> senx分布式锁还存在一些问题，如下redission中所述：
+
+## 5、分布式锁-**redission**
 
 ### 5.1 分布式锁-redission功能介绍
 
@@ -2484,15 +2664,15 @@ public void unlock() {
 
 ![1653546070602](image\Redis实战篇.assets\1653546070602.png)
 
-那么什么是Redission呢
+那么什么是Redisson呢
 
 Redisson是一个在Redis的基础上实现的Java驻内存数据网格（In-Memory Data Grid）。它不仅提供了一系列的分布式的Java常用对象，还提供了许多分布式服务，其中就包含了各种分布式锁的实现。
 
-Redission提供了分布式锁的多种多样的功能
+Redisson提供了分布式锁的多种多样的功能
 
 ![1653546736063](image\Redis实战篇.assets\1653546736063.png)
 
-### 5.2 分布式锁-Redission快速入门
+### 5.2 分布式锁-Redisson快速入门
 
 引入依赖：
 
@@ -2514,8 +2694,8 @@ public class RedissonConfig {
     public RedissonClient redissonClient(){
         // 配置
         Config config = new Config();
-        config.useSingleServer().setAddress("redis://192.168.150.101:6379")
-            .setPassword("123321");
+        // 若是集群使用useClusterServers()
+        config.useSingleServer().setAddress("redis://192.168.111.100:6379").setPassword("123456");
         // 创建RedissonClient对象
         return Redisson.create(config);
     }
@@ -2523,11 +2703,11 @@ public class RedissonConfig {
 
 ```
 
-如何使用Redission的分布式锁
+如何使用Redisson的分布式锁
 
 ```java
 @Resource
-private RedissionClient redissonClient;
+private RedissonClient redissonClient;
 
 @Test
 void testRedisson() throws Exception{
@@ -2542,12 +2722,8 @@ void testRedisson() throws Exception{
         }finally{
             //释放锁
             lock.unlock();
-        }
-        
+        }   
     }
-    
-    
-    
 }
 ```
 
@@ -2604,9 +2780,17 @@ public Result seckillVoucher(Long voucherId) {
 
 在Lock锁中，他是借助于底层的一个voaltile的一个state变量来记录重入的状态的，比如当前没有人持有这把锁，那么state=0，假如有人持有这把锁，那么state=1，如果持有这把锁的人再次持有这把锁，那么state就会+1 ，如果是对于synchronized而言，他在c语言代码中会有一个count，原理和state类似，也是重入一次就加一，释放一次就-1 ，直到减少成0 时，表示当前这把锁没有被人持有。  
 
+![1653548087334](image\Redis实战篇.assets\1653548087334.png)
+
 在redission中，我们的也支持支持可重入锁
 
 在分布式锁中，他采用hash结构用来存储锁，其中大key表示表示这把锁是否存在，用小key表示当前这把锁被哪个线程持有，所以接下来我们一起分析一下当前的这个lua表达式
+
+
+
+**获得锁：**
+
+![image-20231003230525033](image/Redis实战篇.assets/image-20231003230525033.png)
 
 这个地方一共有3个参数
 
@@ -2616,45 +2800,30 @@ public Result seckillVoucher(Long voucherId) {
 
 **ARGV[2]：  id + ":" + threadId; 锁的小key**
 
-exists: 判断数据是否存在  name：是lock是否存在,如果==0，就表示当前这把锁不存在
 
-redis.call('hset', KEYS[1], ARGV[2], 1);此时他就开始往redis里边去写数据 ，写成一个hash结构
 
-Lock{
+**释放锁：**
 
-​    id + **":"** + threadId :  1
+![image-20231003230754547](image/Redis实战篇.assets/image-20231003230754547.png)
 
-}
 
-如果当前这把锁存在，则第一个条件不满足，再判断
-
-redis.call('hexists', KEYS[1], ARGV[2]) == 1
-
-此时需要通过大key+小key判断当前这把锁是否是属于自己的，如果是自己的，则进行
-
-redis.call('hincrby', KEYS[1], ARGV[2], 1)
-
-将当前这个锁的value进行+1 ，redis.call('pexpire', KEYS[1], ARGV[1]); 然后再对其设置过期时间，如果以上两个条件都不满足，则表示当前这把锁抢锁失败，最后返回pttl，即为当前这把锁的失效时间
-
-如果小伙帮们看了前边的源码， 你会发现他会去判断当前这个方法的返回值是否为null，如果是null，则对应则前两个if对应的条件，退出抢锁逻辑，如果返回的不是null，即走了第三个分支，在源码处会进行while(true)的自旋抢锁。
-
-```lua
-"if (redis.call('exists', KEYS[1]) == 0) then " +
-                  "redis.call('hset', KEYS[1], ARGV[2], 1); " +
-                  "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                  "return nil; " +
-              "end; " +
-              "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
-                  "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
-                  "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-                  "return nil; " +
-              "end; " +
-              "return redis.call('pttl', KEYS[1]);"
-```
-
-![1653548087334](image\Redis实战篇.assets\1653548087334.png)
 
 ### 5.4 分布式锁-redission锁重试和WatchDog机制
+
+![image-20231004185259933](image/Redis实战篇.assets/image-20231004185259933.png)
+
+> **锁重试**解决了不能重试的问题，**WatchDog机制**解决了锁超时释放的问题
+>
+> - **锁重试：**当获取锁成功，返回ttl为null；当获取锁失败时，将返回剩余有效期，然后将会判断设置的等待锁的时间是否还有，如果还有则使用订阅机制，订阅锁释放的信号，收到信号后再次判断是否还有剩余时间，有就再次尝试获取锁，若获取锁失败则再次循环上面步骤
+> - **WatchDog机制：**设置锁TTL超时释放时间是因为怕业务宕机过后，造成无人能获取锁的现象，但是如果业务没有宕机也有可能被超时释放，所以设置了WatchDog机制，当**没有设置TTL时，默认为-1，才会有看门狗机制**，默认TTL时间为30s，**只要业务没有宕机**，每过1/3TTL时间即10s，就会重新设置TTL时间，达到不会过期的目的，若是自己设置了TTL时间，则没有看门狗机制，**若是业务宕机**，将无法重置TTL，过期后自动释放锁
+
+
+
+> 1. 可重入：利用hash结构记录线程id和重入次数
+> 2. 可重试：利用信号量和PubSub功能实现等待、唤醒，获取锁失败的重试机制
+> 3. 超时续约：利用watchDog,每隔一段时间(releaseTime/3),重置超时时间
+
+
 
 **说明**：由于课程中已经说明了有关tryLock的源码解析以及其看门狗原理，所以笔者在这里给大家分析lock()方法的源码解析，希望大家在学习过程中，能够掌握更多的知识
 
@@ -2764,13 +2933,38 @@ private void renewExpiration() {
 
 ![1653554055048](image\Redis实战篇.assets\1653554055048.png)
 
-那么MutiLock 加锁原理是什么呢？笔者画了一幅图来说明
-
-当我们去设置了多个锁时，redission会将多个锁添加到一个集合中，然后用while循环去不停去尝试拿锁，但是会有一个总共的加锁时间，这个时间是用需要加锁的个数 * 1500ms ，假设有3个锁，那么时间就是4500ms，假设在这4500ms内，所有的锁都加锁成功， 那么此时才算是加锁成功，如果在4500ms有线程加锁失败，则会再次去进行重试.
 
 
+那么MutiLock（连锁） 加锁原理是什么呢？笔者画了一幅图来说明
+
+> **MutiLock（连锁）：**当我们去设置了多个锁时，redission会将多个锁添加到一个集合中，然后用while循环去不停去尝试拿锁，但是会有一个总共的加锁时间，这个时间是用 需要加锁的个数 * 1500ms ，假设有3个锁，那么时间就是4500ms，假设在这4500ms内，所有的锁都加锁成功（获取到的锁会放到一个acquiredLocks列表里），那么此时才算是加锁成功，如果在4500ms有线程加锁失败，则会释放掉所有已经获得成功的锁，再次去进行重试。
 
 ![1653553093967](image\Redis实战篇.assets\1653553093967.png)
+
+
+
+**使用：**
+
+```java
+RLock lock1 = redissonClient.getLock("order" + userId);
+RLock lock2 = redissonClient.getLock("order" + userId);
+RLock lock3 = redissonClient.getLock("order" + userId);
+RLock multiLock = redissonClient.getMultiLock(lock1, lock2, lock3);
+```
+
+
+
+### 小总结
+
+1. 不可重入Redis分布式锁：
+   - 原理：利用setnx的互斥性；利用ex避免死锁；释放锁时判断线程标示
+   - 缺陷：不可重入、无法重试、锁超时失效
+2. 可重入的Redis分布式锁：
+   - 原理：利用hash结构，记录线程标示和重入次数；利用watchDog延续锁时间；利用信号量控制锁重试等待
+   - 缺陷：redis:宕机引起锁失效问题
+3. Redisson的multiLock:
+   - 原理：多个独立的Redis节点，必须在所有节点都获取重入锁，才算获取锁成功
+   - 缺陷：运维成本高、实现复杂
 
 ## 6、秒杀优化
 
@@ -2822,13 +3016,13 @@ private void renewExpiration() {
 
 需求：
 
-* 新增秒杀优惠券的同时，将优惠券信息保存到Redis中
+1. 新增秒杀优惠券的同时，将优惠券信息保存到Redis中
 
-* 基于Lua脚本，判断秒杀库存、一人一单，决定用户是否抢购成功
+2. 基于Lua脚本，判断秒杀库存、一人一单，决定用户是否抢购成功
 
-* 如果抢购成功，将优惠券id和用户id封装后存入阻塞队列
+3. 如果抢购成功，将优惠券id和用户id封装后存入阻塞队列
 
-* 开启线程任务，不断从阻塞队列中获取信息，实现异步下单功能
+4. 开启线程任务，不断从阻塞队列中获取信息，实现异步下单功能
 
   ![1656080546603](image\Redis实战篇.assets\1656080546603.png)
 
@@ -2895,7 +3089,16 @@ return 0
 
 VoucherOrderServiceImpl
 
+**老师的：**
+
 ```java
+public static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+static {
+    SECKILL_SCRIPT = new DefaultRedisScript<>();
+    SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+    SECKILL_SCRIPT.setResultType(Long.class);
+}
+
 @Override
 public Result seckillVoucher(Long voucherId) {
     //获取用户
@@ -2919,11 +3122,91 @@ public Result seckillVoucher(Long voucherId) {
 }
 ```
 
+**我的：**老师的是直接改secKillVoucher()，但是还得补充完成优惠券可购买时间，但是已经是**不再需要分布式锁上锁**了，lua脚本直接保证了原子性保证了一人一单和不超卖问题
+
+另外：我的多了一个判断是否已经缓存优惠券库存的逻辑
+
+```java
+ @Override
+    public Result secKillVoucher(Long voucherId) {
+        //1 查询优惠券
+        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+        //2 判断秒杀是否开始
+        if (voucher.getBeginTime().isAfter(LocalDateTime.now())) {
+            return Result.fail("秒杀尚未开始！");
+        }
+        //3 判断秒杀是否结束
+        if (voucher.getEndTime().isBefore(LocalDateTime.now())) {
+            return Result.fail("秒杀已经结束！");
+        }
+        //4 判断库存是否充足
+        if (voucher.getStock() < 1) {
+            return Result.fail("库存不足！");
+        }
+
+        return createVoucherOrder(voucherId);
+    }
+
+public static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+static {
+    SECKILL_SCRIPT = new DefaultRedisScript<>();
+    SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+    SECKILL_SCRIPT.setResultType(Long.class);
+}
+
+/**
+ * 优化秒杀之后，使用redis且异步执行
+ * 也可以直接将此方法当成secKillVoucher方法，但是得补充完成优惠券可购买时间
+ */
+@Override
+public Result createVoucherOrder(Long voucherId) {
+    // 判断redis中是否一已经缓存了改优惠券的库存信息，若没有，则获取乐观锁进行缓存构建
+    String s = stringRedisTemplate.opsForValue().get(SECKILL_STOCK_KEY + voucherId);
+    do {
+        if (StrUtil.isBlank(s)) {
+            RLock lock = redissonClient.getLock("voucher" + voucherId);
+            if (lock.tryLock() && StrUtil.isBlank(stringRedisTemplate.opsForValue().get(SECKILL_STOCK_KEY + voucherId))) {
+                try {
+                    SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+                    Integer stock = voucher.getStock();
+                    stringRedisTemplate.opsForValue().set(SECKILL_STOCK_KEY + voucherId, stock.toString());
+                    s = stock.toString();
+                } finally {
+                    lock.unlock();
+                }
+            }
+        }
+    }while (StrUtil.isBlank(s));
+    
+
+    //获取用户
+    Long userId = UserHolder.getUser().getId();
+    long orderId = redisIdWorker.nextId("order");
+    // 1.执行lua脚本
+    Long result = stringRedisTemplate.execute(
+            SECKILL_SCRIPT,
+            Collections.emptyList(),
+            voucherId.toString(), userId.toString()
+    );
+    int r = result.intValue();
+    // 2.判断结果是否为0
+    if (r != 0) {
+        // 2.1.不为0 ，代表没有购买资格
+        return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
+    }
+    //TODO 保存阻塞队列
+    // 3.返回订单id
+    return Result.ok(orderId);
+}
+```
+
 ### 6.3 秒杀优化-基于阻塞队列实现秒杀优化
 
 VoucherOrderServiceImpl
 
 修改下单动作，现在我们去下单时，是通过lua表达式去原子执行判断逻辑，如果判断我出来不为0 ，则要么是库存不足，要么是重复下单，返回错误信息，如果是0，则把下单的逻辑保存到队列中去，然后异步执行
+
+**老师的：**
 
 ```java
 //异步处理线程池
@@ -3036,7 +3319,167 @@ private void init() {
 
 ```
 
+**我的：**
+
+```java
+@Service
+@Slf4j
+public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
+    
+    @Resource
+    private ISeckillVoucherService seckillVoucherService;
+    
+    @Resource
+    private RedisIdWorker redisIdWorker;
+    
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+    
+    @Resource
+    private RedissonClient redissonClient;
+    
+    public static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+    static {
+        SECKILL_SCRIPT = new DefaultRedisScript<>();
+        SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }
+    
+    private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
+    //异步处理线程池
+    public static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
+    //在类初始化之后执行，因为当这个类初始化好了之后，随时都是有可能要执行的
+    @PostConstruct
+    private void init(){
+        SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
+    }
+
+    private IVoucherOrderService proxy;
+    
+    // 用于线程池处理的任务
+    // 当初始化完毕后，就会去从对列中去拿信息
+    private class VoucherOrderHandler implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    // 1.获取队列中的订单信息
+                    VoucherOrder voucherOrder = orderTasks.take();
+                    // 2.创建订单
+                    proxy.handleVoucherOrder(voucherOrder);
+                } catch (InterruptedException e) {
+                    log.error("处理订单异常", e);
+                }
+            }
+        }
+    }
+    
+    @Transactional
+    public void handleVoucherOrder(VoucherOrder voucherOrder) {
+        // 扣减库存
+        seckillVoucherService.update()
+                .setSql("stock = stock - 1") // set stock = stock - 1
+                .eq("voucher_id", voucherOrder.getVoucherId()).gt("stock", 0) // where id = ? and stock > 0
+                .update();
+        // 保存订单
+        this.save(voucherOrder);
+    }
+
+
+    @Override
+    public Result secKillVoucher(Long voucherId) {
+        //1 查询优惠券
+        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+        //2 判断秒杀是否开始
+        if (voucher.getBeginTime().isAfter(LocalDateTime.now())) {
+            return Result.fail("秒杀尚未开始！");
+        }
+        //3 判断秒杀是否结束
+        if (voucher.getEndTime().isBefore(LocalDateTime.now())) {
+            return Result.fail("秒杀已经结束！");
+        }
+        //4 判断库存是否充足
+        if (voucher.getStock() < 1) {
+            return Result.fail("库存不足！");
+        }
+
+        Long userId = UserHolder.getUser().getId();
+
+        return createVoucherOrder(voucherId);
+    }
+
+    /**
+     * 优化秒杀之后，使用redis且异步执行
+     * 也可以直接将此方法当成secKillVoucher方法，但是得补充完成优惠券可购买时间
+     */
+    @Override
+    public Result createVoucherOrder(Long voucherId) {
+        // 判断redis中是否一已经缓存了改优惠券的库存信息，若没有，则获取乐观锁进行缓存构建
+        String s = stringRedisTemplate.opsForValue().get(SECKILL_STOCK_KEY + voucherId);
+        do {
+            if (StrUtil.isBlank(s)) {
+                RLock lock = redissonClient.getLock("voucher" + voucherId);
+                if (lock.tryLock() && StrUtil.isBlank(stringRedisTemplate.opsForValue().get(SECKILL_STOCK_KEY + voucherId))) {
+                    try {
+                        SeckillVoucher voucher = seckillVoucherService.getById(voucherId);
+                        Integer stock = voucher.getStock();
+                        stringRedisTemplate.opsForValue().set(SECKILL_STOCK_KEY + voucherId, stock.toString());
+                        s = stock.toString();
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+            }
+        }while (StrUtil.isBlank(s));
+
+
+        //获取用户
+        Long userId = UserHolder.getUser().getId();
+        long orderId = redisIdWorker.nextId("order");
+        // 1.执行lua脚本
+        Long result = stringRedisTemplate.execute(
+                SECKILL_SCRIPT,
+                Collections.emptyList(),
+                voucherId.toString(), userId.toString()
+        );
+        int r = result.intValue();
+        // 2.判断结果是否为0
+        if (r != 0) {
+            // 2.1.不为0 ，代表没有购买资格
+            return Result.fail(r == 1 ? "库存不足" : "不能重复下单");
+        }
+        
+        //TODO 保存阻塞队列
+        VoucherOrder voucherOrder = new VoucherOrder();
+        // 2.3.订单id
+        voucherOrder.setId(orderId);
+        // 2.4.用户id
+        voucherOrder.setUserId(userId);
+        // 2.5.代金券id
+        voucherOrder.setVoucherId(voucherId);
+        // 获取代理对象，用于异步下单时处理事务
+        proxy =  (IVoucherOrderService)AopContext.currentProxy();
+        // 2.6.放入阻塞队列
+        orderTasks.add(voucherOrder);
+        
+        // 3.返回订单id
+        return Result.ok(orderId);
+    }
+}
+```
+
+
+
 **小总结：**
+
+需求：
+
+1. 新增秒杀优惠券的同时，将优惠券信息保存到Redis中
+2. 基于Lua脚本，判断秒杀库存、一人一单，决定用户是否抢购成功
+3. 如果抢购成功，将优惠券id和用户id封装后存入阻塞队列
+4. 开启线程任务，不断从阻塞队列中获取信息，实现异步下单功能
+
+
 
 秒杀业务的优化思路是什么？
 
@@ -3045,6 +3488,8 @@ private void init() {
 * 基于阻塞队列的异步秒杀存在哪些问题？
   * 内存限制问题
   * 数据安全问题
+
+> 所以秒杀继续优化： 将阻塞队列换为消息队列
 
 
 
@@ -3161,7 +3606,7 @@ STREAM类型消息队列的XREAD命令特点：
 
 ![1653577801668](image\Redis实战篇.assets\1653577801668.png)
 
-创建消费者组：
+**创建消费者组：**
 ![1653577984924](image\Redis实战篇.assets\1653577984924.png)
 key：队列名称
 groupName：消费者组名称
@@ -3187,7 +3632,7 @@ XGROUP CREATECONSUMER key groupname consumername
 XGROUP DELCONSUMER key groupname consumername
 ```
 
-从消费者组读取消息：
+**从消费者组读取消息：**
 
 ```java
 XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] [NOACK] STREAMS key [key ...] ID [ID ...]
@@ -3226,6 +3671,14 @@ XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] [NOACK] STREA
 * 修改之前的秒杀下单Lua脚本，在认定有抢购资格后，直接向stream.orders中添加消息，内容包含voucherId、userId、orderId
 * 项目启动时，开启一个线程任务，尝试获取stream.orders中的消息，完成下单\
 
+
+
+先手动添加消息队列和消费者组
+
+```
+redis> XGROUP create stream.orders g1 0 mkstream
+```
+
 修改lua表达式,新增3.6 
 
 ![1656082824939](image\Redis实战篇.assets\1656082824939.png)
@@ -3256,6 +3709,8 @@ private class VoucherOrderHandler implements Runnable {
                 VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(value, new VoucherOrder(), true);
                 // 3.创建订单
                 createVoucherOrder(voucherOrder);
+                //我的是这句
+                /proxy.handleVoucherOrder(voucherOrder);
                 // 4.确认消息 XACK
                 stringRedisTemplate.opsForStream().acknowledge("s1", "g1", record.getId());
             } catch (Exception e) {
@@ -3822,6 +4277,8 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 
 ![1653812346852](image\Redis实战篇.assets\1653812346852.png)
 
+
+
 ### 9.4 好友关注-推送到粉丝收件箱
 
 需求：
@@ -3980,6 +4437,8 @@ GEO就是Geolocation的简写形式，代表地理坐标。Redis在3.2版本中�
 * GEOSEARCH：在指定范围内搜索member，并按照与指定点之间的距离排序后返回。范围可以是圆形或矩形。6.2.新功能
 * GEOSEARCHSTORE：与GEOSEARCH功能一致，不过可以把结果存储到一个指定的key。 6.2.新功能
 
+> GEO底层使用的是ZSET，讲member转换为value，经纬坐标转换为score
+
 ### 10.2、 附近商户-导入店铺数据到GEO
 
 具体场景说明：
@@ -4030,7 +4489,7 @@ void loadShopData() {
 
 ### 10.3 附近商户-实现附近商户功能
 
-SpringDataRedis的2.3.9版本并不支持Redis 6.2提供的GEOSEARCH命令，因此我们需要提示其版本，修改自己的POM
+SpringDataRedis的2.3.12.REALEASE版本并不支持Redis 6.2提供的GEOSEARCH命令，因此我们需要提示其版本，修改自己的POM
 
 第一步：导入pom
 
@@ -4158,7 +4617,7 @@ ShopServiceImpl
 
 把每一个bit位对应当月的每一天，形成了映射关系。用0和1标示业务状态，这种思路就称为位图（BitMap）。这样我们就用极小的空间，来实现了大量数据的表示
 
-Redis中是利用string类型数据结构实现BitMap，因此最大上限是512M，转换为bit则是 2^32个bit位。
+**Redis中是利用string类型数据结构实现BitMap，因此最大上限是512M**，转换为bit则是 2^32个bit位。
 
 ![1653824498278](image\Redis实战篇.assets\1653824498278.png)
 
@@ -4349,7 +4808,7 @@ id % bitmap.size  = 算出当前这个id对应应该落在bitmap的哪个索引�
 UV统计在服务端做会比较麻烦，因为要判断该用户是否已经统计过了，需要将统计过的用户信息保存。但是如果每个访问的用户都保存到Redis中，数据量会非常恐怖，那怎么处理呢？
 
 Hyperloglog(HLL)是从Loglog算法派生的概率算法，用于确定非常大的集合的基数，而不需要存储其所有值。相关算法原理大家可以参考：https://juejin.cn/post/6844903785744056333#heading-0
-Redis中的HLL是基于string结构实现的，单个HLL的内存**永远小于16kb**，**内存占用低**的令人发指！作为代价，其测量结果是概率性的，**有小于0.81％的误差**。不过对于UV统计来说，这完全可以忽略。
+Redis中的**HLL是基于string结构实现**的，单个HLL的内存**永远小于16kb**，**内存占用低**的令人发指！作为代价，其测量结果是概率性的，**有小于0.81％的误差**。不过对于UV统计来说，这完全可以忽略。
 
 ![1653837988985](image\Redis实战篇.assets\1653837988985.png)
 

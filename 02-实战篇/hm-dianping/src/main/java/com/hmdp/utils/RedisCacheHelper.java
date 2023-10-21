@@ -178,7 +178,16 @@ public class RedisCacheHelper {
         boolean isLock = this.tryLock(lockKey);
         // TODO 6.2 判断是否获取锁成功
         if (isLock) {
-            // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
+            // TODO 可以在这里再进行一个double check，如果redis缓存依旧是过期的，才进行缓存重建
+            String jsonAgain = stringRedisTemplate.opsForValue().get(key);
+            RedisData redisDataAgain = JSONUtil.toBean(jsonAgain, RedisData.class);
+            JSONObject jsonObjectAgain = (JSONObject) redisDataAgain.getData();
+            R rAgain = JSONUtil.toBean(jsonObjectAgain, type);
+            LocalDateTime expireTimeAgain = redisDataAgain.getExpireTime();
+            if (expireTimeAgain.isAfter(LocalDateTime.now())) {
+                this.unlock(lockKey);
+                return rAgain;
+            }
             // TODO 6.3 成功，开启独立线程，实现缓存重建你
             CompletableFuture.runAsync(() -> {
                 try {
@@ -251,11 +260,16 @@ public class RedisCacheHelper {
         }
         try {
             // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
-
+            String json = stringRedisTemplate.opsForValue().get(key);
+            if (StrUtil.isNotBlank(json)) {
+                R r = JSONUtil.toBean(json, type);
+                return r;
+            }
+            if (json != null) {
+                return null;
+            }
             // TODO 4.4 成功，根据id查询数据库
             R r = dbFallback.apply(id);
-            // 模拟缓存击穿重建业务耗时久情况
-            Thread.sleep(200);
             // 5 数据库不存在，返回错误
             if (r == null) {
                 /**
@@ -269,14 +283,18 @@ public class RedisCacheHelper {
 
             // 7 存在，返回数据
             return r;
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         } finally {
             // TODO 7 释放互斥锁
             this.unlock(lockKey);
         }
     }
 
+    /**
+     * 简单的分布式锁实现方案
+     * 以setnx命令作为互斥，以ttl过期时间作为安全性保证，安全性较低
+     * @param key
+     * @return
+     */
     //互斥锁简单实现，获得锁，queryWithLogicalExpire和queryWithMutex方法内调用
     private boolean tryLock(String key) {
         Boolean isLock = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10L, TimeUnit.SECONDS);
