@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>商品管理</title>
+  <link href="./css/main.css" rel="stylesheet">
+  <!-- 引入样式 -->
+  <link rel="stylesheet" href="./css/element.css">
+
+
+</head>
+<body>
+<div id="app">
+  <h1>商品数据管理</h1>
+  <div class="add-btn">
+    <el-button type="primary" size="small" @click="beginAdd">新增商品</el-button>
+  </div>
+  <el-table
+      :data="items"
+      border
+      @cell-click="handleCellClick"
+      style="width: 100%">
+    <el-table-column
+        v-for="h in headers" :key="h.prop"
+        :prop="h.prop"
+        :label="h.text"
+        :width="h.width"
+        :align="h.align"
+        v-if="h.prop !== 'image' && h.prop !== 'spec'"
+    >
+    </el-table-column>
+    <el-table-column
+        v-else-if="h.prop === 'spec'"
+        :prop="h.prop"
+        :label="h.text"
+        :width="h.width"
+        :align="h.align"
+    >
+      <template slot-scope="scope">
+        <div v-for="(v, k) in parseJSON(scope.row.spec)">
+          {{k}} : {{v}}
+        </div>
+      </template>
+    </el-table-column>
+    <el-table-column
+        v-else
+        :prop="h.prop"
+        :label="h.text"
+        :width="h.width"
+        :align="h.align"
+    >
+      <template slot-scope="scope">
+        <el-image
+            style="width: 50px; height: 50px"
+            :src="scope.row.image"
+            fit="fill"></el-image>
+      </template>
+
+    </el-table-column>
+    <el-table-column align="center" label="操作" :width="160">
+      <template slot-scope="scope">
+        <el-button type="primary" plain icon="el-icon-edit" circle size="mini"
+                   @click="handleEdit(scope.$index, scope.row)"></el-button>
+        <el-button type="danger" plain icon="el-icon-delete" circle size="mini"
+                   @click="handleDelete(scope.$index, scope.row)"></el-button>
+        <el-tooltip class="item" v-if="scope.row.status === 2" effect="dark" content="上架" placement="top-start">
+          <el-button type="success" plain icon="el-icon-upload2" circle size="mini"
+                     @click="handleUp(scope.row.id)"></el-button>
+        </el-tooltip>
+        <el-tooltip class="item" v-else effect="dark" content="下架" placement="top-start">
+          <el-button type="info" plain icon="el-icon-download" circle size="mini"
+                     @click="handleDown(scope.row.id)"></el-button>
+        </el-tooltip>
+
+      </template>
+    </el-table-column>
+  </el-table>
+  <el-pagination
+      @current-change="query"
+      style="margin-top: 5px"
+      background
+      :page-size="5"
+      layout="prev, pager, next"
+      :total="total">
+  </el-pagination>
+  <el-dialog title="商品信息" :visible.sync="formVisible" width="30%" style="padding: 0 20px;">
+    <el-form :model="item" size="small" label-position="left" :label-width="formLabelWidth">
+      <el-form-item label="商品名称">
+        <el-input v-model="item.name" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item label="商品分类">
+        <el-input v-model="item.category" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item label="商品品牌">
+        <el-input v-model="item.brand" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item label="商品价格">
+        <el-input v-model.number="item.price" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item label="商品库存" v-if="!isEdit">
+        <el-input v-model.number="item.stock" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item label="商品规格">
+        <el-input v-model="item.spec" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item label="商品图片">
+        <el-input v-model="item.image" autocomplete="off"></el-input>
+      </el-form-item>
+    </el-form>
+    <div slot="footer" class="dialog-footer">
+      <el-button @click="formVisible = false">取 消</el-button>
+      <el-button type="primary" @click="confirmEdit">确 定</el-button>
+    </div>
+  </el-dialog>
+  <el-dialog :visible.sync="stockFormVisible" width="30%" style="padding: 0 20px;">
+    <el-form :inline="true" :model="item" size="small" label-position="left">
+      <el-form-item>
+        <el-input v-model.numner="item.stock" autocomplete="off"></el-input>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="confirmStock">提交</el-button>
+      </el-form-item>
+    </el-form>
+  </el-dialog>
+</div>
+<script src="./js/vue.js"></script>
+<script src="./js/axios.min.js"></script>
+<!-- 引入组件库 -->
+<script src="./js/element.js"></script>
+<script>
+  // 设置后台服务地址
+  axios.defaults.baseURL = "http://localhost:8081";
+  axios.defaults.timeout = 3000;
+
+  const app = new Vue({
+    el: "#app",
+    data: {
+      headers: [
+        {prop: "id", text: "ID", width: 100, align: "center"},
+        {prop: "name", text: "商品名称", width: 0, align: "center"},
+        {prop: "category", text: "分类", width: 100, align: "center"},
+        {prop: "brand", text: "品牌", width: 100, align: "center"},
+        {prop: "price", text: "价格", width: 100, align: "center"},
+        {prop: "stock", text: "库存", width: 100, align: "center"},
+        {prop: "image", text: "图片", width: 80, align: "center"},
+        {prop: "spec", text: "规格", width: 180, align: "center"},
+      ],
+      items: [],
+      total: 1000,
+      formVisible: false, // 是否显示表单
+      stockFormVisible: false, // 是否显示库存表单
+      formLabelWidth: "100px", // 表单label宽度
+      item: {}, // 表单中的酒店数据
+      isEdit: false, // 是否是更新
+      lastPage: 1,// 上一次查询的页码
+    },
+    created() {
+      this.query(1);
+    },
+    methods: {
+      handleCellClick(row, column) {
+        if(column.property === 'stock'){
+          // 回显库存
+          this.item = {id: row.id, stock: row.stock}
+          // 表单显示
+          this.stockFormVisible = true;
+        }
+      },
+      confirmStock(v1, v2) {
+        axios.put("/item/stock", this.item)
+          .then(() => {
+            this.$message({
+              message: '更新库存成功',
+              type: 'success'
+            });
+            this.stockFormVisible = false;
+            this.reload();
+          })
+          .catch(err => {
+            this.$message({
+              message: '更新库存失败',
+              type: 'error'
+            });
+            console.log(err);
+          })
+      },
+      beginAdd() {
+        this.isEdit = false;
+        this.item = {image: ""};
+        this.formVisible = true;
+      },
+      query(page) {
+        this.lastPage = page;
+        axios.get("/item/list", {
+            params: {
+              page: page, size: 5
+            }
+          })
+          .then(resp => {
+            this.items = resp.data.list;
+            this.total = resp.data.total;
+          })
+          .catch(err => console.log(err));
+      },
+      handleEdit(v1, v2) {
+        /*if (v2.status === 1) {
+          this.$message({
+            message: '上架的商品不能修改，请先下架！',
+            type: 'error'
+          });
+          return;
+        }*/
+        this.isEdit = true;
+        this.item = JSON.parse(JSON.stringify(v2));
+        this.formVisible = true;
+      },
+      handleDelete(v1, v2) {
+        /*if (v2.status === 1) {
+          this.$message({
+            message: '上架的商品不能删除，请先下架！',
+            type: 'error'
+          });
+          return;
+        }*/
+        this.$confirm('此操作将永久删除商品信息, 是否继续?', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }).then(() => {
+          this.deleteById(v2.id);
+        }).catch(() => {
+          this.$message({
+            type: 'info',
+            message: '已取消删除'
+          });
+        });
+      },
+      confirmEdit() {
+        if (this.isEdit) {
+          axios.put("/item", this.item)
+            .then(resp => {
+              this.$message({
+                message: '更新成功',
+                type: 'success'
+              });
+              this.formVisible = false;
+              this.reload();
+            })
+            .catch(err => {
+              this.$message({
+                message: '更新失败',
+                type: 'error'
+              });
+              console.log(err);
+            })
+        } else {
+          axios.post("/item", this.item)
+            .then(resp => {
+              this.$message({
+                message: '新增成功',
+                type: 'success'
+              });
+              this.formVisible = false;
+              this.reload();
+            })
+            .catch(err => {
+              this.$message({
+                message: '新增失败',
+                type: 'error'
+              });
+              console.log(err);
+            })
+        }
+
+      },
+      deleteById(id) {
+        axios.delete("/item/" + id)
+          .then(() => {
+            this.$message({
+              type: 'success',
+              message: '删除成功!'
+            });
+            this.reload();
+          })
+          .catch(err => {
+            this.$message({
+              type: 'error',
+              message: '删除失败!'
+            });
+            console.log(err);
+          })
+      },
+      handleUp(id) {
+        this.updateStatus(id, 1);
+      },
+      handleDown(id) {
+        this.updateStatus(id, 2);
+      },
+      updateStatus(id, status) {
+        let action = status === 1 ? "上架" : "下架";
+
+        axios.put("/item/status/" + id + "/" + status)
+          .then(() => {
+            this.$message({
+              type: 'success',
+              message: action + '成功!'
+            });
+            this.reload();
+          })
+          .catch(err => {
+            this.$message({
+              type: 'error',
+              message: action + '失败!'
+            });
+            console.log(err);
+          })
+      },
+      reload() {
+        this.query(this.lastPage);
+      },
+      parseJSON(str) {
+        return JSON.parse(str);
+      }
+    }
+  })
+</script>
+</body>
+</html>

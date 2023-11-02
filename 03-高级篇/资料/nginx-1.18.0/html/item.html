@@ -1,0 +1,432 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=9; IE=8; IE=7; IE=EDGE">
+  <meta http-equiv="X-UA-Compatible" content="IE=EmulateIE7" />
+  <title>黑马商城--商品详情页</title>
+  <link rel="icon" href="/assets/img/favicon.ico">
+
+  <link rel="stylesheet" type="text/css" href="/css/webbase.css" />
+  <link rel="stylesheet" type="text/css" href="/css/pages-item.css" />
+  <link rel="stylesheet" type="text/css" href="/css/pages-zoom.css" />
+
+  <style type="text/css">
+    .goods-intro-list li {
+      display: inline-block;
+      width: 300px;
+    }
+
+    .Ptable {
+      margin: 10px 0;
+    }
+
+    .Ptable-item {
+      padding: 12px 0;
+      line-height: 220%;
+      color: #999;
+      font-size: 12px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .Ptable-item h3 {
+      width: 110px;
+      text-align: right;
+    }
+
+    .Ptable-item h3,
+    .package-list h3 {
+      font-weight: 400;
+      font-size: 12px;
+      float: left;
+    }
+
+    h3 {
+      display: block;
+      font-size: 1.17em;
+      -webkit-margin-before: 1em;
+      -webkit-margin-after: 1em;
+      -webkit-margin-start: 0px;
+      -webkit-margin-end: 0px;
+      font-weight: bold;
+    }
+
+    .Ptable-item dl {
+      margin-left: 110px;
+    }
+
+    dl {
+      display: block;
+      -webkit-margin-before: 1em;
+      -webkit-margin-after: 1em;
+      -webkit-margin-start: 0px;
+      -webkit-margin-end: 0px;
+    }
+
+    .Ptable-item dt {
+      width: 160px;
+      float: left;
+      text-align: right;
+      padding-right: 5px;
+    }
+
+    .Ptable-item dd {
+      margin-left: 210px;
+    }
+
+    dd {
+      display: block;
+      -webkit-margin-start: 40px;
+    }
+
+    .package-list {
+      padding: 12px 0;
+      line-height: 220%;
+      color: #999;
+      font-size: 12px;
+      margin-top: -1px;
+    }
+
+    .package-list h3 {
+      width: 130px;
+      text-align: right;
+    }
+
+    .package-list p {
+      margin-left: 155px;
+      padding-right: 50px;
+    }
+
+    .test-btn {
+      background-color: #CCCCCC;
+      color: rgb(63, 66, 63);
+      border-radius: 10px;
+      width: 60px;
+      height: 20px;
+      font-size: 12px;
+      text-align: center;
+      line-height: 20px;
+      cursor: pointer;
+      box-shadow: inset 0px 0px 2px 1px rgba(0, 0, 0, 0.63);
+    }
+
+    .test-btn:hover {
+      box-shadow: inset 0px 0px 2px 1px rgba(1, 88, 30, 0.63);
+    }
+
+    .active-test {
+      background-color: #02be31;
+      color: rgb(252, 252, 252);
+    }
+
+    /* 内部阴影 */
+  </style>
+
+</head>
+
+<body>
+
+  <!-- 头部栏位 -->
+  <!--页面顶部，由js动态加载-->
+  <div>
+    <div id="nav-bottom">
+      <div class="py-container">
+        <div class="shortcut">
+          <ul class="fl">
+            <li class="f-item">黑马欢迎您！</li>
+            <li class="f-item">请登录　<span><a href="#">免费注册</a></span></li>
+          </ul>
+          <ul class="fr">
+            <li class="f-item">我的订单</li>
+            <li class="f-item space"></li>
+            <li class="f-item">我的黑马</li>
+            <li class="f-item space"></li>
+            <li class="f-item">黑马会员</li>
+            <li class="f-item space"></li>
+            <li class="f-item">企业采购</li>
+            <li class="f-item space"></li>
+            <li class="f-item">关注黑马</li>
+            <li class="f-item space"></li>
+            <li class="f-item">客户服务</li>
+            <li class="f-item space"></li>
+            <li class="f-item">网站导航</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="py-container">
+      <div id="item">
+        <div id="itemApp">
+          <div class="test-btn" :class='{"active-test": isTest}' @click="isTest=!isTest">
+            {{ isTest ? "测试" : "正式"}}
+          </div>
+          <div class="crumb-wrap">
+            <!--顶部面包屑-->
+            <ul class="sui-breadcrumb">
+              <li>
+                <a href="/category/123.html" v-text="item.category"></a>
+              </li>
+              <li>
+                <a href="/brand/321.html" v-text="item.brand"></a>
+              </li>
+              <li class="active" v-text="item.name"></li>
+            </ul>
+          </div>
+          <!--product-info-->
+          <div class="product-info">
+            <div class="fl preview-wrap">
+              <!--放大镜效果-->
+              <div class="zoom">
+                <!--默认第一个预览-->
+                <div id="preview" class="spec-preview">
+                  <span class="jqzoom">
+                    <img :jqimg="item.image" :src="item.image" width="400px" height="400px" />
+                  </span>
+                </div>
+                <!--下方的缩略图-->
+                <div class="spec-scroll">
+                  <a class="prev">&lt;</a>
+                  <!--左右按钮-->
+                  <div class="items">
+                    <ul>
+                      <li>
+                        <img :src="item.image" :bimg="item.image" onmousemove="preview(this)" />
+                      </li>
+                    </ul>
+                  </div>
+                  <a class="next">&gt;</a>
+                </div>
+              </div>
+            </div>
+            <!--商品信息-->
+            <div class="fr itemInfo-wrap">
+              <div class="sku-name">
+                <h4 v-text="item.title"></h4>
+              </div>
+              <div class="news"><span>推荐选择下方[移动优惠购],手机套餐齐搞定,不用换号,每月还有花费返</span></div>
+              <div class="summary">
+                <div class="summary-wrap">
+                  <div class="fl title"><i>价　　格</i></div>
+                  <div class="fl price">
+                    <i>¥</i><em v-text="util.formatPrice(item.price)"></em><span>降价通知</span>
+                  </div>
+                  <div class="fr remark"><i>累计评价</i><em>612188</em></div>
+                </div>
+                <div class="summary-wrap">
+                  <div class="fl title">
+                    <i>促　　销</i>
+                  </div>
+                  <div class="fl fix-width">
+                    <i class="red-bg">加价购</i>
+                    <em class="t-gray">满999.00另加20.00元，或满1999.00另加30.00元，或满2999.00另加40.00元，即可在购物车换
+                      购热销商品</em>
+                  </div>
+                </div>
+              </div>
+              <div class="support">
+                <div class="summary-wrap">
+                  <div class="fl title">
+                    <i>支　　持</i>
+                  </div>
+                  <div class="fl fix-width">
+                    <em class="t-gray">以旧换新，闲置手机回收 4G套餐超值抢 礼品购</em>
+                  </div>
+                </div>
+                <div class="summary-wrap">
+                  <div class="fl title">
+                    <i>配 送 至</i>
+                  </div>
+                  <div class="fl fix-width">
+                    <em class="t-gray">上海 , 库存 <span>{{item.stock}}</span></em>
+                  </div>
+                </div>
+              </div>
+              <div class="clearfix choose">
+                <!--sku选项-->
+                <div id="specification" class="summary-wrap clearfix" v-for="(v,k) in parseJSON(item.spec)">
+                  <dl>
+                    <dt>
+                      <div class="fl title">
+                        <i v-text="k"></i>
+                      </div>
+                    </dt>
+                    <dd>
+                      <i v-text="v"></i>
+                    </dd>
+                  </dl>
+                </div>
+
+                <div class="summary-wrap">
+                  <div class="fl title">
+                    <div class="control-group">
+                      <div class="controls">
+                        <input autocomplete="off" type="text" disabled v-model="num" minnum="1" class="itxt" />
+                        <a href="javascript:void(0)" class="increment plus" @click="increment">+</a>
+                        <a href="javascript:void(0)" class="increment mins" @click="decrement">-</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="fl">
+                    <ul class="btn-choose unstyled">
+                      <li>
+                        <a href="success-cart.html" @click.prevent="addCart" target="_blank"
+                          class="sui-btn  btn-danger addshopcar">加入购物车</a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!--product-detail-->
+        <div class="clearfix product-detail">
+          <!--侧边-->
+          <div class="fl aside">
+            <ul class="sui-nav nav-tabs tab-wraped">
+              <li class="active">
+                <a href="#index" data-toggle="tab">
+                  <span>相关分类</span>
+                </a>
+              </li>
+              <li>
+                <a href="#profile" data-toggle="tab">
+                  <span>推荐品牌</span>
+                </a>
+              </li>
+            </ul>
+            <div class="tab-content tab-wraped">
+              <div id="index" class="tab-pane active">
+                <ul class="part-list unstyled">
+                  <li>手机</li>
+                  <li>手机壳</li>
+                  <li>内存卡</li>
+                  <li>Iphone配件</li>
+                  <li>贴膜</li>
+                  <li>手机耳机</li>
+                  <li>移动电源</li>
+                  <li>平板电脑</li>
+                </ul>
+              </div>
+              <div id="profile" class="tab-pane">
+                <p>推荐品牌</p>
+              </div>
+            </div>
+          </div>
+          <div class="fr detail">
+            <div class="tab-main intro">
+              <!--导航-->
+              <ul class="sui-nav nav-tabs tab-wraped">
+                <li class="active">
+                  <a href="#one" data-toggle="tab">
+                    <span>商品介绍</span>
+                  </a>
+                </li>
+              </ul>
+              <div class="clearfix"></div>
+
+              <div class="tab-content tab-wraped">
+                <!--参数预览-->
+                <div id="one" class="tab-pane active">
+                  <ul class="goods-intro-list unstyled" style="list-style: none;">
+                    <li>分辨率：1920*1080(FHD)</li>
+                    <li>后置摄像头：1200万像素</li>
+                    <li>前置摄像头：500万像素</li>
+                    <li>核 数：其他</li>
+                    <li>频 率：以官网信息为准</li>
+                    <li>品牌： Apple</li>
+                    <li>商品名称：APPLEiPhone 6s Plus</li>
+                    <li>商品编号：1861098</li>
+                    <li>商品毛重：0.51kg</li>
+                    <li>商品产地：中国大陆</li>
+                    <li>热点：指纹识别，Apple Pay，金属机身，拍照神器</li>
+                    <li>系统：苹果（IOS）</li>
+                    <li>像素：1000-1600万</li>
+                    <li>机身内存：64GB</li>
+                  </ul>
+                  <!--商品详情-->
+                  <div class="intro-detail">
+                    商品详情
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <script src="/js/vue.js"></script>
+    <script src="/js/axios.min.js"></script>
+    <script src="/js/common.js"></script>
+
+    <script>
+      const itemVm = new Vue({
+        el: "#itemApp",
+        data: {
+          util,
+          num: 1, // 购买数量
+          item: {}, //商品信息
+          isTest: false // 是否是测试模式
+        },
+        created() {
+          // 根据id查询商品
+          this.queryItemById();
+        },
+        watch: {
+          isTest() {
+            this.queryItemById();
+          }
+        },
+        methods: {
+          queryItemById(id) {
+            if (!this.isTest) {
+              // 获取页面的商品id
+              let id = this.util.getUrlParam("id");
+              // 正式模式，查询商品信息
+              axios.get("/api/item/" + id)
+                .then(resp => this.item = resp.data)
+                .catch(err => {
+                  this.isTest = true
+                  console.log(err);
+                })
+            } else {
+              // 测试模式，提供假数据
+              this.item = {
+                "id": 10001,
+                "name": "SALSA AIR",
+                "title": "RIMOWA 21寸托运箱拉杆箱 SALSA AIR系列果绿色 820.70.36.4",
+                "price": 17900,
+                "image": "https://m.360buyimg.com/mobilecms/s720x720_jfs/t6934/364/1195375010/84676/e9f2c55f/597ece38N0ddcbc77.jpg!q70.jpg.webp",
+                "category": "拉杆箱",
+                "brand": "RIMOWA",
+                "spec": "",
+                "status": 1,
+                "createTime": "2019-04-30T16:00:00.000+00:00",
+                "updateTime": "2019-04-30T16:00:00.000+00:00",
+                "stock": 2999,
+                "sold": 31290
+              }
+            }
+          },
+          decrement() {
+            if (this.num > 1) {
+              this.num--;
+            }
+          },
+          increment() {
+            this.num++;
+          },
+          parseJSON(str) {
+            if (!str) {
+              return {};
+            }
+            return JSON.parse(str);
+          }
+        }
+      });
+    </script>
+</body>
+
+</html>
