@@ -1789,7 +1789,7 @@ public class RedisIdWorker {
     public static final int COUNT_BITS = 32;
 
     /**
-     * 雪花算法实现，1位符号位 + 31位时间戳 + 32位序列号
+     * 1位符号位 + 31位时间戳 + 32位序列号
      * @param keyPrefix
      * @return
      */
