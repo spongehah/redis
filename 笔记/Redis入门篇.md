@@ -1,6 +1,6 @@
-# 基础篇Redis
+#  基础篇Redis
 
-## 开篇导读
+# 开篇导读
 
 **理想课程**
 
@@ -10,7 +10,7 @@
 
 
 
-## 1.Redis简单介绍
+# 1.Redis简单介绍
 
 Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
@@ -27,7 +27,7 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-## 2.课程目录
+# 2.课程目录
 
 >- 初始Redis
 >    - 认识NoSQL
@@ -43,13 +43,13 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-## 3.初始Redis
+# 3.初始Redis
 
-### 3.1.认识NoSQL
+## 3.1.认识NoSQL
 
 **NoSql**可以翻译做Not Only Sql（不仅仅是SQL），或者是No Sql（非Sql的）数据库。是相对于传统关系型数据库而言，有很大差异的一种特殊的数据库，因此也称之为**非关系型数据库**。
 
-#### 3.1.1.结构化与非结构化
+### 3.1.1.结构化与非结构化
 
 传统关系型数据库是结构化数据，每一张表都有严格的约束信息：字段名.字段数据类型.字段约束等等信息，插入的数据必须遵守这些约束：
 
@@ -75,7 +75,7 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-#### 3.1.2.关联和非关联
+### 3.1.2.关联和非关联
 
 传统数据库的表与表之间往往存在关联，例如外键：
 
@@ -110,7 +110,7 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-#### 3.1.3.查询方式
+### 3.1.3.查询方式
 
 传统关系型数据库会基于Sql语句做查询，语法有统一标准；
 
@@ -120,7 +120,7 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-#### 3.1.4.事务
+### 3.1.4.事务
 
 传统关系型数据库能满足事务ACID的原则。
 
@@ -132,7 +132,7 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-#### 3.1.5.总结
+### 3.1.5.总结
 
 除了上述四点以外，在存储方式.扩展性.查询性能上关系型与非关系型也都有着显著差异，总结如下：
 
@@ -149,7 +149,7 @@ Redis是一种键值型的NoSql数据库，这里有两个关键字：
 
 
 
-### 3.2.认识Redis
+## 3.2.认识Redis
 
 Redis诞生于2009年全称是**Re**mote  **D**ictionary **S**erver 远程词典服务器，是一个基于内存的键值型NoSQL数据库。
 
@@ -168,9 +168,9 @@ Redis的官方网站地址：https://redis.io/
 
 
 
-### 3.3.单机安装Redis
+## 3.3.单机安装Redis
 
-#### 3.3.1.安装Redis依赖
+### 3.3.1.安装Redis依赖
 
 Redis是基于C语言编写的，因此首先需要安装Redis所需要的gcc依赖：
 
@@ -180,7 +180,7 @@ yum install -y gcc tcl
 
 
 
-#### 3.3.2.上传安装包并解压
+### 3.3.2.上传安装包并解压
 
 然后将课前资料提供的Redis安装包上传到虚拟机的任意目录：
 
@@ -230,7 +230,7 @@ make && make install
 
 
 
-#### 3.3.3.启动
+### 3.3.3.启动
 
 redis的启动方式有很多种，例如：
 
@@ -240,7 +240,7 @@ redis的启动方式有很多种，例如：
 
 
 
-##### 3.3.3.1.默认启动
+#### 3.3.3.1.默认启动
 
 安装完成后，在任意目录输入redis-server命令即可启动Redis：
 
@@ -258,7 +258,7 @@ redis-server
 
 
 
-##### 3.3.3.2.指定配置启动
+#### 3.3.3.2.指定配置启动
 
 如果要让Redis以`后台`方式启动，则必须修改Redis配置文件，就在我们之前解压的redis安装包下（`/usr/local/src/redis-6.2.6`），名字叫redis.conf：
 
@@ -275,11 +275,11 @@ cp redis.conf redis.conf.bck
 然后修改redis.conf文件中的一些配置：
 
 ```properties
-# 允许访问的地址，默认是127.0.0.1，会导致只能在本地访问。修改为0.0.0.0则可以在任意IP访问，生产环境不要设置为0.0.0.0
+ 允许访问的地址，默认是127.0.0.1，会导致只能在本地访问。修改为0.0.0.0则可以在任意IP访问，生产环境不要设置为0.0.0.0
 bind 0.0.0.0
-# 守护进程，修改为yes后即可后台运行
+ 守护进程，修改为yes后即可后台运行
 daemonize yes 
-# 密码，设置后访问Redis必须输入密码
+ 密码，设置后访问Redis必须输入密码
 requirepass 123321
 ```
 
@@ -288,15 +288,15 @@ requirepass 123321
 Redis的其它常见配置：
 
 ```properties
-# 监听的端口
+ 监听的端口
 port 6379
-# 工作目录，默认是当前目录，也就是运行redis-server时的命令，日志、持久化等文件会保存在这个目录
+ 工作目录，默认是当前目录，也就是运行redis-server时的命令，日志、持久化等文件会保存在这个目录
 dir .
-# 数据库数量，设置为1，代表只使用1个库，默认有16个库，编号0~15
+ 数据库数量，设置为1，代表只使用1个库，默认有16个库，编号0~15
 databases 1
-# 设置redis能够使用的最大内存
+ 设置redis能够使用的最大内存
 maxmemory 512mb
-# 日志文件，默认为空，不记录日志，可以指定日志文件名
+ 日志文件，默认为空，不记录日志，可以指定日志文件名
 logfile "redis.log"
 ```
 
@@ -305,9 +305,9 @@ logfile "redis.log"
 启动Redis：
 
 ```sh
-# 进入redis安装目录 
+ 进入redis安装目录 
 cd /usr/local/src/redis-6.2.6
-# 启动
+ 启动
 redis-server redis.conf
 ```
 
@@ -316,14 +316,14 @@ redis-server redis.conf
 停止服务：
 
 ```sh
-# 利用redis-cli来执行 shutdown 命令，即可停止 Redis 服务，
-# 因为之前配置了密码，因此需要通过 -u 来指定密码
+ 利用redis-cli来执行 shutdown 命令，即可停止 Redis 服务，
+ 因为之前配置了密码，因此需要通过 -u 来指定密码
 redis-cli -u 123321 shutdown
 ```
 
 
 
-##### 3.3.3.3.开机自启
+#### 3.3.3.3.开机自启
 
 我们也可以通过配置来实现开机自启。
 
@@ -362,13 +362,13 @@ systemctl daemon-reload
 现在，我们可以用下面这组命令来操作redis了：
 
 ```sh
-# 启动
+ 启动
 systemctl start redis
-# 停止
+ 停止
 systemctl stop redis
-# 重启
+ 重启
 systemctl restart redis
-# 查看状态
+ 查看状态
 systemctl status redis
 ```
 
@@ -382,7 +382,7 @@ systemctl enable redis
 
 
 
-### 3.4.Redis客户端
+## 3.4.Redis客户端
 
 安装完成Redis，我们就可以操作Redis，实现数据的CRUD了。这需要用到Redis客户端，包括：
 
@@ -392,7 +392,7 @@ systemctl enable redis
 
 
 
-#### 3.4.1.Redis命令行客户端
+### 3.4.1.Redis命令行客户端
 
 Redis安装完成后就自带了命令行客户端：redis-cli，使用方式如下：
 
@@ -416,7 +416,7 @@ redis-cli [options] [commonds]
 
 
 
-#### 3.4.2.图形化桌面客户端
+### 3.4.2.图形化桌面客户端
 
 GitHub上的大神编写了Redis的图形化桌面客户端，地址：https://github.com/uglide/RedisDesktopManager
 
@@ -428,7 +428,7 @@ GitHub上的大神编写了Redis的图形化桌面客户端，地址：https://g
 
 ![image-20211211111351885](image/Redis入门篇.assets/image-20211211111351885.png)
 
-##### 3.4.2.1.安装
+#### 3.4.2.1.安装
 
 在课前资料中可以找到Redis的图形化桌面客户端：
 
@@ -450,7 +450,7 @@ GitHub上的大神编写了Redis的图形化桌面客户端，地址：https://g
 
 
 
-##### 2.2.2.2.建立连接
+#### 2.2.2.2.建立连接
 
 点击左上角的`连接到Redis服务器`按钮：
 
@@ -473,13 +473,13 @@ Redis默认有16个仓库，编号从0至15.  通过配置文件可以设置仓�
 如果是基于redis-cli连接Redis服务，可以通过select命令来选择数据库：
 
 ```sh
-# 选择 0号库
+ 选择 0号库
 select 0
 ```
 
-## 4.Redis常见命令
+# 4.Redis常见命令
 
-### 4.1 Redis数据结构介绍
+## 4.1 Redis数据结构介绍
 
 Redis是一个key-value的数据库，key一般是String类型，不过value的类型多种多样：
 
@@ -495,7 +495,7 @@ Redis为了方便我们学习，将操作不同数据类型的命令也做了分
 
 ![1652887748279](image/Redis入门篇.assets/1652887748279.png)
 
-### 4.2 Redis 通用命令
+## 4.2 Redis 通用命令
 
 通用指令是部分数据类型的，都可以使用的指令，常见的有：
 
@@ -519,7 +519,7 @@ Redis为了方便我们学习，将操作不同数据类型的命令也做了分
 2) "age"
 127.0.0.1:6379>
 
-# 查询以a开头的key
+ 查询以a开头的key
 127.0.0.1:6379> keys a*
 1) "age"
 127.0.0.1:6379>
@@ -612,7 +612,7 @@ OK
 
 
 
-### 4.3 Redis命令-String命令
+## 4.3 Redis命令-String命令
 
 String类型，也就是字符串类型，是Redis中最简单的存储类型。
 
@@ -741,7 +741,7 @@ OK
 
 
 
-### 4.4 Redis命令-Key的层级结构
+## 4.4 Redis命令-Key的层级结构
 
 Redis没有类似MySQL中的Table的概念，我们该如何区分不同类型的key呢？
 
@@ -774,7 +774,7 @@ Redis的key允许有多个单词形成层级结构，多个单词之间用':'隔
 
 
 
-### 4.5 Redis命令-Hash命令
+## 4.5 Redis命令-Hash命令
 
 Hash类型，也叫散列，其value是一个无序字典，类似于Java中的HashMap结构。
 
@@ -890,7 +890,7 @@ OK
 6) "woman"
 ```
 
-### 4.6 Redis命令-List命令
+## 4.6 Redis命令-List命令
 
 Redis中的List类型与Java中的LinkedList类似，可以看做是一个双向链表结构。既可以支持正向检索和也可以支持反向检索。
 
@@ -947,7 +947,7 @@ Redis中的List类型与Java中的LinkedList类似，可以看做是一个双向
 2) "4"
 ```
 
-### 4.7 Redis命令-Set命令
+## 4.7 Redis命令-Set命令
 
 Redis的Set结构与Java中的HashSet类似，可以看做是一个value为null的HashMap。因为也是一个hash表，因此具备与HashSet类似的特征：
 
@@ -1059,7 +1059,7 @@ Redis的Set结构与Java中的HashSet类似，可以看做是一个value为null�
 2) "wangwu"
 ```
 
-### 4.8 Redis命令-SortedSet类型
+## 4.8 Redis命令-SortedSet类型
 
 Redis的SortedSet是一个可排序的set集合，与Java中的TreeSet有些类似，但底层数据结构却差别很大。SortedSet中的每一个元素都带有一个score属性，可以基于score属性对元素排序，底层的实现是一个跳表（SkipList）加 hash表。
 
@@ -1093,7 +1093,7 @@ SortedSet的常见命令有：
 
 
 
-## 5.Redis的Java客户端-Jedis
+# 5.Redis的Java客户端-Jedis
 
 在Redis官网中提供了各种语言的客户端，地址：https://redis.io/docs/clients/
 
@@ -1110,7 +1110,7 @@ SortedSet的常见命令有：
 
 
 
-### 5.1 Jedis快速入门
+## 5.1 Jedis快速入门
 
 **入门案例详细步骤**
 
@@ -1205,7 +1205,7 @@ void tearDown() {
 
 
 
-### 5.2 Jedis连接池
+## 5.2 Jedis连接池
 
 Jedis本身是线程不安全的，并且频繁的创建和销毁连接会有性能损耗，因此我们推荐大家使用Jedis连接池代替Jedis的直连方式
 
@@ -1213,7 +1213,7 @@ Jedis本身是线程不安全的，并且频繁的创建和销毁连接会有性
 
 
 
-#### 5.2.1.创建Jedis的连接池
+### 5.2.1.创建Jedis的连接池
 
 - 
 
@@ -1250,7 +1250,7 @@ public class JedisConnectionFacotry {
 
 
 
-#### 5.2.2.改造原始代码
+### 5.2.2.改造原始代码
 
 **代码说明:**
 
@@ -1280,7 +1280,7 @@ public class JedisConnectionFacotry {
 
 
 
-## 6.Redis的Java客户端-SpringDataRedis
+# 6.Redis的Java客户端-SpringDataRedis
 
 SpringData是Spring中数据操作的模块，包含对各种数据库的集成，其中对Redis的集成模块就叫做SpringDataRedis，官网地址：https://spring.io/projects/spring-data-redis
 
@@ -1298,11 +1298,11 @@ SpringDataRedis中提供了RedisTemplate工具类，其中封装了各种对Redi
 
 
 
-### 6.1.快速入门
+## 6.1.快速入门
 
 SpringBoot已经提供了对SpringDataRedis的支持，使用非常简单：
 
-#### 6.1.1.导入pom坐标
+### 6.1.1.导入pom坐标
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -1371,7 +1371,7 @@ SpringBoot已经提供了对SpringDataRedis的支持，使用非常简单：
 </project>
 ```
 
-#### 6.1.2 .配置文件
+### 6.1.2 .配置文件
 
 ```yaml
 spring:
@@ -1387,7 +1387,7 @@ spring:
         max-wait: 100ms #连接等待时间
 ```
 
-#### 6.1.3.测试代码
+### 6.1.3.测试代码
 
 ```java
 @SpringBootTest
@@ -1417,7 +1417,7 @@ SpringDataRedis的使用步骤：
 
 
 
-### 6.2 .数据序列化器
+## 6.2 .数据序列化器
 
 RedisTemplate可以接收任意Object作为值写入Redis：
 
@@ -1489,7 +1489,7 @@ public class RedisConfig {
 
 
 
-### 6.3 StringRedisTemplate
+## 6.3 StringRedisTemplate
 
 ```java
 @Test
@@ -1576,7 +1576,7 @@ RedisTemplate的两种序列化实践方案：
   * 缺点：麻烦
 
 
-### 6.4 Hash结构操作
+## 6.4 Hash结构操作
 
 在基础篇的最后，咱们对Hash结构操作一下，收一个小尾巴，这个代码咱们就不再解释啦
 
