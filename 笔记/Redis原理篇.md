@@ -773,11 +773,11 @@ Linux系统为了提高IO效率，会在用户空间和内核空间都加入缓�
 
 在《UNIX网络编程》一书中，总结归纳了5种IO模型：
 
-* 阻塞IO（Blocking IO）
-* 非阻塞IO（Nonblocking IO）
+* 阻塞IO（Blocking IO）**BIO**
+* 非阻塞IO（Nonblocking IO）**NIO**
 * IO多路复用（IO Multiplexing）
 * 信号驱动IO（Signal Driven IO）
-* 异步IO（Asynchronous IO）
+* 异步IO（Asynchronous IO）**AIO**
 
 应用程序想要去读取数据，他是无法直接去读取磁盘数据的，他需要先到内核里边去等待内核操作硬件拿到数据，**这个过程就是1**，是需要等待的，**等到内核从磁盘上把数据加载出来之后**，再把这个数据**写给用户的缓存区**，**这个过程是2**，如果是阻塞IO，那么整个过程中，**用户从发起读请求开始，一直到读取到数据，都是一个阻塞状态。**
 
@@ -901,9 +901,9 @@ IO多路复用是利用单个线程来同时监听多个FD，并在某个FD可�
 - poll
 - epoll
 
-uselect和poll**只会通知用户进程有FD就绪**，但不确定具体是哪个FD，需要用户进程**逐个遍历FD来确认**
+select和poll**只会通知用户进程有FD就绪**，但不确定具体是哪个FD，需要用户进程**逐个遍历FD来确认**
 
-uepoll则会在通知用户进程FD就绪的同时，**把已就绪的FD写入用户空间**
+epoll则会在通知用户进程FD就绪的同时，**把已就绪的FD写入用户空间**
 
 
 
@@ -1152,11 +1152,11 @@ Redis通过IO多路复用来提高网络性能，并且支持各种不同的多�
 > 3. 调用createSocketAcceptHandler方法注册监听ssfd，对ssfd绑定**连接应答处理器tcpAcceptHandler**(**类似服务端的epoll_ctl**)
 >    - **tcpAcceptHandler**的触发条件是**有新的客户端连接进来**了，作用是接收客户端socket数据得到其中的fd，然后创建连接关联客户端fd，监听客户端fd，并对客户端fd绑定**读命令请求处理器readQueryFromClient**
 > 4. 注册**aeApiPoll前置处理器beforeSleep**，调用aeApiPoll前调用
->    - 循环监听server.clients_pending_write队列(即监听队列中是否有处理好的请求的client，然若有则调用绑定的sendReplyToClient)，绑定**写命令回复处理器sendReplyToClient**，可以把响应写到客户端。(一个client代表一次连接，但是一个连接可以有很多请求，即很多fd)
-> 5. 注册监听好ssfd并绑定好客户端读/写命令处理器后，**先调用beforeSleep**绑定sendReplyToClient，再调用aeApiPoll方法(类似epoll_wait)，开始循环监听事件，看是否有fd准备就绪（这里的fd包括服务端的ssfd和客户端fd：）
+>    - 调用aeApiPoll前监听server.clients_pending_write队列，即监听队列中是否有第一次处理好请求的client，若有则对client绑定**写命令回复处理器sendReplyToClient**，可以把该client准备好的数据响应写到客户端。(一个client代表一次连接，但是一个连接可以有很多请求，即很多fd)
+> 5. 注册监听好ssfd并绑定好客户端读/写命令处理器后，**先调用beforeSleep**，再调用aeApiPoll方法(类似epoll_wait)，开始循环监听事件，看是否有fd准备就绪（这里的fd包括服务端的ssfd和客户端fd：）
 >    - 服务端ssfd的作用是当有客户端请求进来时**调用连接应答处理器tcpAcceptHandler**对客户端socket进行连接，注册监听其中的fd并绑定readQueryFromClient(**类似客户端的epoll_ctl**)(对应ssfd可读)
 >    - 客户端fd有两种（对应ssfd不可读），一种是**读事件**，发生在客户端fd刚注册绑定好过后(**即IO多路复用模型中第一阶段的系统调用**)，会**调用读命令请求处理器readQueryFromClient**：先通过客户端连接对象conn得到客户端对象client，将客户端连接conn中的请求数据写入该客户端对象client的querybuffer，然后解析querybuffer中的数据转换为Redis命令存入argv数组中，然后客户端拿出argv数组中的命令选择执行Redis命令后得到执行结果，先将结果写入该客户端对象client的buf(客户端写缓冲区)中，如果写不下就写入客户端对象client的reply链表中(容量无上限)，将客户端添加到server.clients_pending_write这个队列，等待被写出(自此，**IO多路复用模型中第一阶段的等待数据完成**)
->    - 另一种是**写事件**，在第4步时已经在一直监听写事件，即**调用写命令回复处理器sendReplyToClient**处理读事件放入server.clients_pending_write队列中的客户端client，把响应数据写到客户端socket发送给客户端(**即IO多路复用模型中第二阶段返回数据给用户进程的过程**)
+>    - 另一种是**写事件**，在第4步时因为每次调用aeApiPoll前都会调用beforeSleep，而beforeSleep会遍历server.clients_pending_write队列检查是否有准备好数据的client，并会对该队列中的每个client都绑定上了写命令回复处理器，当该client有数据准备好时即**调用绑定的写命令回复处理器sendReplyToClient**，把准备好的响应数据写到客户端socket发送给客户端(**即IO多路复用模型中第二阶段返回数据给用户进程的过程**)
 
 中间三个即 **IO多路复用 + 事件派发**：
 

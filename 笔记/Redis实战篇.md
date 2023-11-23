@@ -40,7 +40,7 @@
 
 
 
-![1653056228879](image\Redis实战篇.assets\1653056228879.png)
+![1653056228879](image/Redis实战篇.assets/1653056228879.png)
 
 # 1、短信登录
 
@@ -48,7 +48,7 @@
 
 ### 1.1.1 、导入SQL
 
-![1653057872536](image\Redis实战篇.assets\1653057872536.png)
+![1653057872536](image/Redis实战篇.assets/1653057872536.png)
 
 ### 1.1.2、有关当前模型
 
@@ -56,23 +56,23 @@
 
 在tomcat支撑起并发流量后，我们如果让tomcat直接去访问Mysql，根据经验Mysql企业级服务器只要上点并发，一般是16或32 核心cpu，32 或64G内存，像企业级mysql加上固态硬盘能够支撑的并发，大概就是4000起~7000左右，上万并发， 瞬间就会让Mysql服务器的cpu，硬盘全部打满，容易崩溃，所以我们在高并发场景下，会选择使用mysql集群，同时为了进一步降低Mysql的压力，同时增加访问的性能，我们也会加入Redis，同时使用Redis集群使得Redis对外提供更好的服务。
 
-![1653059409865](image\Redis实战篇.assets\1653059409865.png)
+![1653059409865](image/Redis实战篇.assets/1653059409865.png)
 
 ### 1.1.3、导入后端项目
 
 在资料中提供了一个项目源码：
 
-![1653060237073](image\Redis实战篇.assets\1653060237073.png)
+![1653060237073](image/Redis实战篇.assets/1653060237073.png)
 
 http://localhost:8081/shop-type/list
 
 ### 1.1.4、导入前端工程
 
-![1653060337562](image\Redis实战篇.assets\1653060337562.png)
+![1653060337562](image/Redis实战篇.assets/1653060337562.png)
 
 ### 1.1.5 运行前端项目
 
-![1653060588190](image\Redis实战篇.assets\1653060588190.png)
+![1653060588190](image/Redis实战篇.assets/1653060588190.png)
 
 
 
@@ -94,13 +94,13 @@ http://localhost:8081/shop-type/list
 
 
 
-![1653066208144](image\Redis实战篇.assets\1653066208144.png)
+![1653066208144](image/Redis实战篇.assets/1653066208144.png)
 
 ## 1.3 、实现发送短信验证码功能
 
 **页面流程**
 
-![1653067054461](image\Redis实战篇.assets\1653067054461.png)
+![1653067054461](image/Redis实战篇.assets/1653067054461.png)
 
 **具体代码如下**
 
@@ -177,7 +177,7 @@ private User createUserWithPhone(String phone) {
 
 **温馨小贴士：tomcat的运行原理**
 
-![1653068196656](image\Redis实战篇.assets\1653068196656.png)
+![1653068196656](image/Redis实战篇.assets/1653068196656.png)
 
 当用户发起请求时，会访问我们像tomcat注册的端口，任何程序想要运行，都需要有一个线程对当前端口号进行监听，tomcat也不例外，当监听线程知道用户想要和tomcat连接连接时，那会由监听线程创建socket连接，socket都是成对出现的，用户通过socket像互相传递数据，当tomcat端的socket接受到数据后，此时监听线程会从tomcat的线程池中取出一个线程执行用户请求，在我们的服务部署到tomcat后，线程会找到用户想要访问的工程，然后用这个线程转发到工程中的controller，service，dao中，并且访问对应的DB，在用户执行完请求后，再统一返回，再找到tomcat端的socket，再将数据写回到用户端的socket，完成请求和响应
 
@@ -191,7 +191,7 @@ private User createUserWithPhone(String phone) {
 
 
 
-![1653068874258](image\Redis实战篇.assets\1653068874258.png)
+![1653068874258](image/Redis实战篇.assets/1653068874258.png)
 
 拦截器代码
 
@@ -300,7 +300,7 @@ tomcat服务器**session不共享**
 
 所以咱们后来采用的方案都是基于redis来完成，我们把session换成redis，redis数据本身就是共享的，就可以避免session共享的问题了
 
-![1653069893050](image\Redis实战篇.assets\1653069893050.png)
+![1653069893050](image/Redis实战篇.assets/1653069893050.png)
 
 ## 1.7 Redis代替session的业务流程
 
@@ -308,7 +308,7 @@ tomcat服务器**session不共享**
 
 首先我们要思考一下利用redis来存储数据，那么到底使用哪种结构呢？由于存入的数据比较简单，我们可以考虑使用String，或者是使用哈希，如下图，如果使用String，同学们注意他的value，用多占用一点空间，如果使用哈希，则他的value中只会存储他数据本身，如果不是特别在意内存，其实使用String就可以啦。
 
-![1653319261433](image\Redis实战篇.assets\1653319261433.png)
+![1653319261433](image/Redis实战篇.assets/1653319261433.png)
 
 ### 1.7.2、设计key的具体细节
 
@@ -326,7 +326,7 @@ tomcat服务器**session不共享**
 
 当注册完成后，用户去登录会去校验用户提交的手机号和验证码，是否一致，如果一致，则根据手机号查询用户信息，不存在则新建，最后将用户数据保存到redis，并且生成token作为redis的key，当我们校验用户是否登录时，会去携带着token进行访问，从redis中取出token对应的value，判断是否存在这个数据，如果没有则拦截，如果存在则将其保存到threadLocal中，并且放行。
 
-![1653319474181](image\Redis实战篇.assets\1653319474181.png)
+![1653319474181](image/Redis实战篇.assets/1653319474181.png)
 
 
 
@@ -388,13 +388,13 @@ public Result login(LoginFormDTO loginForm, HttpSession session) {
 
 在这个方案中，他确实可以使用对应路径的拦截，同时刷新登录token令牌的存活时间，但是现在这个拦截器他**只是拦截需要被拦截的路径**，假设当前用户访问了一些不需要拦截的路径，那么这个拦截器就不会生效，所以此时令牌刷新的动作实际上就不会执行，所以这个方案他是存在问题的
 
-![1653320822964](image\Redis实战篇.assets\1653320822964.png)
+![1653320822964](image/Redis实战篇.assets/1653320822964.png)
 
 ###  1.9.2 优化方案
 
 既然之前的拦截器无法对不需要拦截的路径生效，那么我们可以添加一个拦截器，在第一个拦截器中拦截所有的路径，把第二个拦截器做的事情放入到第一个拦截器中，同时刷新令牌，因为第一个拦截器有了threadLocal的数据，所以此时第二个拦截器只需要判断拦截器中的user对象是否存在即可，完成整体刷新功能。
 
-![1653320764547](image\Redis实战篇.assets\1653320764547.png)
+![1653320764547](image/Redis实战篇.assets/1653320764547.png)
 
 ### 1.9.3 代码 
 
@@ -470,7 +470,7 @@ public class LoginInterceptor implements HandlerInterceptor {
 
 **前言**:**什么是缓存?**
 
-就像自行车,越野车的避震器![](image\Redis实战篇.assets\避震器.gif)
+就像自行车,越野车的避震器![](image/Redis实战篇.assets/避震器.gif)
 
 举个例子:越野车,山地自行车,都拥有"避震器",**防止**车体加速后因惯性,在酷似"U"字母的地形上飞跃,硬着陆导致的**损害**,像个弹簧一样;
 
@@ -500,7 +500,7 @@ public class LoginInterceptor implements HandlerInterceptor {
 
 但是缓存也会增加代码复杂度和运营的成本:
 
-![](image\Redis实战篇.assets\image-20220523214414123.png)
+![](image/Redis实战篇.assets/image-20220523214414123.png)
 
 ### 2.1.2 如何使用缓存
 
@@ -514,7 +514,7 @@ public class LoginInterceptor implements HandlerInterceptor {
 
 **CPU缓存：**当代计算机最大的问题是 cpu性能提升了，但内存读写速度没有跟上，所以为了适应当下的情况，增加了cpu的L1，L2，L3级的缓存
 
-![](image\Redis实战篇.assets\image-20220523212915666.png)
+![](image/Redis实战篇.assets/image-20220523212915666.png)
 
 
 
@@ -538,7 +538,7 @@ public Result queryShopById(@PathVariable("id") Long id) {
 
 标准的操作方式就是查询数据库之前先查询缓存，如果缓存数据存在，则直接从缓存中返回，如果缓存数据不存在，再查询数据库，然后将数据存入redis。
 
-![1653322097736](image\Redis实战篇.assets\1653322097736.png)
+![1653322097736](image/Redis实战篇.assets/1653322097736.png)
 
 ### 2.1.2、代码如下
 
@@ -606,7 +606,7 @@ public Result queryById(Long id) {
 
 **主动更新：**我们可以手动调用方法把缓存删掉，通常用于解决缓存和数据库不一致问题
 
-![1653322506393](image\Redis实战篇.assets\1653322506393.png)
+![1653322506393](image/Redis实战篇.assets/1653322506393.png)
 
 ### 2.3.1 、数据库缓存不一致解决方案：
 
@@ -622,7 +622,7 @@ Read/Write Through Pattern : 由系统本身完成，数据库与缓存的问题
 
 Write Behind Caching Pattern ：调用者只操作缓存，其他线程去异步处理数据库，实现最终一致
 
-![1653322857620](image\Redis实战篇.assets\1653322857620.png)
+![1653322857620](image/Redis实战篇.assets/1653322857620.png)
 
 ### 2.3.2 、数据库和缓存不一致采用什么方案
 
@@ -648,7 +648,7 @@ Write Behind Caching Pattern ：调用者只操作缓存，其他线程去异步
   * 先删除缓存，再操作数据库
   * **先操作数据库，再删除缓存**
 
-![1653323595206](image\Redis实战篇.assets\1653323595206.png)
+![1653323595206](image/Redis实战篇.assets/1653323595206.png)
 
 
 
@@ -755,7 +755,7 @@ public Result update(Shop shop) {
 
 这种方式优点在于节约内存空间，存在误判，误判原因在于：布隆过滤器走的是哈希思想，只要哈希思想，就可能存在哈希冲突
 
-![1653326156516](image\Redis实战篇.assets\1653326156516.png)
+![1653326156516](image/Redis实战篇.assets/1653326156516.png)
 
 
 
@@ -769,7 +769,7 @@ public Result update(Shop shop) {
 
 
 
-![1653327124561](image\Redis实战篇.assets\1653327124561.png)
+![1653327124561](image/Redis实战篇.assets/1653327124561.png)
 
 ```java
 @Override
@@ -986,7 +986,7 @@ public Customer findCustomerByIdWithBloomFilter (Integer customerId){
 * 给缓存业务添加降级限流策略（SpringCloud）
 * 给业务添加多级缓存（浏览器缓存，Nginx缓存，Tomcat缓存，JVM缓存等待），高级部分会讲
 
-![1653327884526](image\Redis实战篇.assets\1653327884526.png)
+![1653327884526](image/Redis实战篇.assets/1653327884526.png)
 
 ## 2.8 **缓存击穿**问题及解决思路
 
@@ -996,7 +996,7 @@ public Customer findCustomerByIdWithBloomFilter (Integer customerId){
 
 
 
-![1653328022622](image\Redis实战篇.assets\1653328022622.png)
+![1653328022622](image/Redis实战篇.assets/1653328022622.png)
 
 
 
@@ -1013,7 +1013,7 @@ public Customer findCustomerByIdWithBloomFilter (Integer customerId){
 
 假设现在线程1过来访问，他查询缓存没有命中，但是此时他获得到了锁的资源，那么线程1就会一个人去执行逻辑，假设现在线程2过来，线程2在执行过程中，并没有获得到锁，那么线程2就可以进行到休眠，直到线程1把锁释放后，线程2获得到锁，然后再来执行逻辑，此时就能够从缓存中拿到数据了。
 
-![1653328288627](image\Redis实战篇.assets\1653328288627.png)
+![1653328288627](image/Redis实战篇.assets/1653328288627.png)
 
 **解决方案二、逻辑过期方案**
 
@@ -1025,7 +1025,7 @@ public Customer findCustomerByIdWithBloomFilter (Integer customerId){
 
 这种方案巧妙在于，异步的构建缓存，缺点在于在构建完缓存之前，返回的都是脏数据。
 
-![1653328663897](image\Redis实战篇.assets\1653328663897.png)
+![1653328663897](image/Redis实战篇.assets/1653328663897.png)
 
 
 
@@ -1035,7 +1035,7 @@ public Customer findCustomerByIdWithBloomFilter (Integer customerId){
 
 **逻辑过期方案：** 线程读取过程中不需要等待，性能好，有一个额外的线程持有锁去进行重构数据，但是在重构数据完成前，其他的线程只能返回之前的数据，且实现起来麻烦
 
-![1653357522914](image\Redis实战篇.assets\1653357522914.png)
+![1653357522914](image/Redis实战篇.assets/1653357522914.png)
 
 
 
@@ -1047,7 +1047,7 @@ public Customer findCustomerByIdWithBloomFilter (Integer customerId){
 
 如果获取到了锁的线程，再去进行查询，查询后将数据写入redis，再释放锁，返回数据，利用互斥锁就能保证只有一个线程去执行操作数据库的逻辑，防止缓存击穿
 
-![1653357860001](image\Redis实战篇.assets\1653357860001.png)
+![1653357860001](image/Redis实战篇.assets/1653357860001.png)
 
 
 
@@ -1209,7 +1209,7 @@ private Result queryWithMutex(Long id) {
 
 思路分析：当用户开始查询redis时，判断是否命中，如果没有命中则直接返回空数据，不查询数据库，而一旦命中后，将value取出，判断value中的过期时间是否满足，如果没有过期，则直接返回redis中的数据，如果过期，则在开启独立线程后直接返回之前的数据，独立线程去重构数据，重构完成后释放互斥锁。
 
-![1653360308731](image\Redis实战篇.assets\1653360308731.png)
+![1653360308731](image/Redis实战篇.assets/1653360308731.png)
 
 > 未命中直接返回是因为我们**手动提前设置好redis逻辑过期数据**
 
@@ -1735,7 +1735,7 @@ public Result queryById(Long id) {
 
 每个店铺都可以发布优惠券：
 
-![1653362612286](image\Redis实战篇.assets\1653362612286.png)
+![1653362612286](image/Redis实战篇.assets/1653362612286.png)
 
 当用户抢购时，就会生成订单并保存到tb_voucher_order这张表中，而订单表如果使用数据库自增ID就存在一些问题：
 
@@ -1748,7 +1748,7 @@ public Result queryById(Long id) {
 
 **全局ID生成器**，是一种在分布式系统下用来生成全局唯一ID的工具，一般要满足下列特性：
 
-![1653363100502](image\Redis实战篇.assets\1653363100502.png)
+![1653363100502](image/Redis实战篇.assets/1653363100502.png)
 
 <img src="image/Redis实战篇.assets/image-20230926155729468.png" alt="image-20230926155729468" style="zoom:50%;" />
 
@@ -1761,7 +1761,7 @@ public Result queryById(Long id) {
 
 **Redis自增做全局唯一ID：**
 
-![1653363172079](image\Redis实战篇.assets\1653363172079.png)ID的
+![1653363172079](image/Redis实战篇.assets/1653363172079.png)ID的
 
 - 组成部分：符号位：1bit，永远为0
 - 时间戳：31bit，以秒为单位，可以使用69年
@@ -1857,7 +1857,7 @@ void testIdWorker() throws InterruptedException {
 
 每个店铺都可以发布优惠券，分为平价券和特价券。平价券可以任意购买，而特价券需要秒杀抢购：
 
-![1653365145124](image\Redis实战篇.assets\1653365145124.png)
+![1653365145124](image/Redis实战篇.assets/1653365145124.png)
 
 tb_voucher：优惠券的基本信息，优惠金额、使用规则等
 tb_seckill_voucher：优惠券的库存、开始抢购时间，结束抢购时间。特价优惠券才需要填写这些信息
@@ -1935,7 +1935,7 @@ POST：http://localhost:8081/voucher/seckill
 
 下单核心思路：当我们点击抢购时，会触发右侧的请求，我们只需要编写对应的controller即可
 
-![1653365839526](image\Redis实战篇.assets\1653365839526.png)
+![1653365839526](image/Redis实战篇.assets/1653365839526.png)
 
 秒杀下单应该思考的内容：
 
@@ -1950,7 +1950,7 @@ POST：http://localhost:8081/voucher/seckill
 
 比如时间是否充足，如果时间充足，则进一步判断库存是否足够，如果两者都满足，则扣减库存，创建订单，然后返回订单id，如果有一个条件不满足则直接结束。
 
-![1653366238564](image\Redis实战篇.assets\1653366238564.png)
+![1653366238564](image/Redis实战篇.assets/1653366238564.png)
 
 VoucherOrderServiceImpl
 
@@ -2021,11 +2021,11 @@ public Result seckillVoucher(Long voucherId) {
 
 假设线程1过来查询库存，判断出来库存大于1，正准备去扣减库存，但是还没有来得及去扣减，此时线程2过来，线程2也去查询库存，发现这个数量一定也大于1，那么这两个线程都会去扣减库存，最终多个线程相当于一起去扣减库存，此时就会出现库存的超卖问题。
 
-![1653368335155](image\Redis实战篇.assets\1653368335155.png)
+![1653368335155](image/Redis实战篇.assets/1653368335155.png)
 
 超卖问题是典型的多线程安全问题，针对这一问题的常见解决方案就是加锁：而对于加锁，我们通常有两种解决方案：见下图：
 
-![1653368562591](image\Redis实战篇.assets\1653368562591.png)
+![1653368562591](image/Redis实战篇.assets/1653368562591.png)
 
 **悲观锁：**
 
@@ -2052,7 +2052,7 @@ return var5;
 
 课程中的使用方式是没有像cas一样带自旋的操作，也没有对version的版本号+1 ，他的操作逻辑是在操作时，对版本号进行+1 操作，然后要求version 如果是1 的情况下，才能操作，那么第一个线程在操作后，数据库中的version变成了2，但是他自己满足version=1 ，所以没有问题，此时线程2执行，线程2 最后也需要加上条件version =1 ，但是现在由于线程1已经操作过了，所以线程2，操作时就不满足version=1 的条件了，所以线程2无法执行成功
 
-![1653369268550](image\Redis实战篇.assets\1653369268550.png)
+![1653369268550](image/Redis实战篇.assets/1653369268550.png)
 
 ## 3.6 乐观锁解决超卖问题
 
@@ -2094,7 +2094,7 @@ Java8 提供的一个对AtomicLong改进后的一个类，LongAdder
 
 如果获取某个值，则会对cell和base的值进行递增，最后返回一个完整的值
 
-![1653370271627](image\Redis实战篇.assets\1653370271627.png)
+![1653370271627](image/Redis实战篇.assets/1653370271627.png)
 
 ## 3.6 单机优惠券秒杀-**一人一单**
 
@@ -2106,7 +2106,7 @@ Java8 提供的一个对AtomicLong改进后的一个类，LongAdder
 
 具体操作逻辑如下：比如时间是否充足，如果时间充足，则进一步判断库存是否足够，然后再根据优惠卷id和用户id查询是否已经下过这个订单，如果下过这个订单，则不再下单，否则进行下单
 
-![1653371854389](image\Redis实战篇.assets\1653371854389.png)
+![1653371854389](image/Redis实战篇.assets/1653371854389.png)
 
 VoucherOrderServiceImpl  
 
@@ -2305,11 +2305,11 @@ synchronized (userId.toString().intern()) {
 
 1、我们将服务启动两份，端口分别为8081和8082：
 
-![1653373887844](image\Redis实战篇.assets\1653373887844.png)
+![1653373887844](image/Redis实战篇.assets/1653373887844.png)
 
 2、然后修改nginx的conf目录下的nginx.conf文件，配置反向代理和负载均衡：
 
-![1653373908620](image\Redis实战篇.assets\1653373908620.png)
+![1653373908620](image/Redis实战篇.assets/1653373908620.png)
 
 **具体操作(略)**
 
@@ -2317,7 +2317,7 @@ synchronized (userId.toString().intern()) {
 
 由于现在我们部署了多个tomcat，每个tomcat都有一个属于自己的jvm，那么假设在服务器A的tomcat内部，有两个线程，这两个线程由于使用的是同一份代码，那么他们的锁对象是同一个，是可以实现互斥的，但是如果现在是服务器B的tomcat内部，又有两个线程，但是他们的锁对象写的虽然和服务器A一样，但是锁对象却不是同一个，所以线程3和线程4可以实现互斥，但是却无法和线程1和线程2实现互斥，这就是 集群环境下，syn锁失效的原因，在这种情况下，我们就需要使用分布式锁来解决这个问题。
 
-![1653374044740](image\Redis实战篇.assets\1653374044740.png)
+![1653374044740](image/Redis实战篇.assets/1653374044740.png)
 
 # 4、分布式锁-setnx
 
@@ -2327,7 +2327,7 @@ synchronized (userId.toString().intern()) {
 
 分布式锁的核心思想就是让大家都使用同一把锁，只要大家使用的是同一把锁，那么我们就能锁住线程，不让线程进行，让程序串行执行，这就是分布式锁的核心思路
 
-![1653374296906](image\Redis实战篇.assets\1653374296906.png)
+![1653374296906](image/Redis实战篇.assets/1653374296906.png)
 
 那么分布式锁他应该满足一些什么样的条件呢？
 
@@ -2344,7 +2344,7 @@ synchronized (userId.toString().intern()) {
 
 
 
-![1653381992018](image\Redis实战篇.assets\1653381992018.png)
+![1653381992018](image/Redis实战篇.assets/1653381992018.png)
 
 常见的分布式锁有三种
 
@@ -2355,7 +2355,7 @@ synchronized (userId.toString().intern()) {
 3. Zookeeper：zookeeper也是企业级开发中较好的一个实现分布式锁的方案，由于本套视频并不讲解zookeeper的原理和分布式锁的实现，所以不过多阐述
 
 
-![1653382219377](image\Redis实战篇.assets\1653382219377.png)
+![1653382219377](image/Redis实战篇.assets/1653382219377.png)
 
 ## 4.2 、Redis分布式锁的实现核心思路
 
@@ -2374,13 +2374,13 @@ synchronized (userId.toString().intern()) {
   * 手动释放
   * 超时释放：获取锁时添加一个超时时间
 
-  ![1653382669900](image\Redis实战篇.assets\1653382669900.png)
+  ![1653382669900](image/Redis实战篇.assets/1653382669900.png)
 
 核心思路：
 
 我们利用redis 的setNx 方法，当有多个线程进入时，我们就利用该方法，第一个线程进入时，redis 中就有这个key 了，返回了1，如果结果是1，则表示他抢到了锁，那么他去执行业务，然后再删除锁，退出锁逻辑，没有抢到锁的哥们，等待一定时间后重试即可
 
- <img src="image/Redis实战篇.assets/image-20230927104437637.png" alt="image-20230927104437637" style="zoom:50%;float:left" /><img src="image\Redis实战篇.assets\1653382830810.png" alt="1653382830810" style="zoom: 67%;" />
+ <img src="image/Redis实战篇.assets/image-20230927104437637.png" alt="image-20230927104437637" style="zoom:50%;float:left" /><img src="image/Redis实战篇.assets/1653382830810.png" alt="1653382830810" style="zoom: 67%;" />
 
 ## 4.3 实现分布式锁版本一
 
@@ -2503,7 +2503,7 @@ public void unlock() {
 
 解决方案：解决方案就是在每个线程释放锁的时候，去判断一下当前这把锁是否属于自己，如果属于自己，则不进行锁的删除，假设还是上边的情况，线程1卡顿，锁自动释放，线程2进入到锁的内部执行逻辑，此时线程1反应过来，然后删除锁，但是线程1，一看当前这把锁不是属于自己，于是不进行删除锁逻辑，当线程2走到删除锁逻辑时，如果没有卡过自动释放锁的时间点，则判断当前这把锁是属于自己的，于是删除这把锁。
 
-![1653385920025](image\Redis实战篇.assets\1653385920025.png)
+![1653385920025](image/Redis实战篇.assets/1653385920025.png)
 
 
 
@@ -2517,7 +2517,7 @@ public void unlock() {
 
 核心逻辑：在存入锁时，放入自己线程的标识，在删除锁时，判断当前这把锁的标识是不是自己存入的，如果是，则进行删除，如果不是，则不进行删除。
 
-![1653387398820](image\Redis实战篇.assets\1653387398820.png)
+![1653387398820](image/Redis实战篇.assets/1653387398820.png)
 
 具体代码如下：
 
@@ -2571,7 +2571,7 @@ public class SimpleRedisLock implements ILock{
 
 线程1现在持有锁之后，在执行业务逻辑过程中，他正准备删除锁，而且已经走到了条件判断的过程中，比如他已经拿到了当前这把锁确实是属于他自己的，正准备删除锁，但是此时他的锁到期了，那么此时线程2进来，但是线程1他会接着往后执行，当他卡顿结束后，他直接就会执行删除锁那行代码，相当于条件判断并没有起到作用，这就是删锁时的原子性问题，之所以有这个问题，是因为线程1的拿锁，比锁，删锁，实际上并不是原子性的，我们要防止刚才的情况发生，
 
-![1653387764938](image\Redis实战篇.assets\1653387764938.png)
+![1653387764938](image/Redis实战篇.assets/1653387764938.png)
 
 ## 4.7 **Lua脚本**解决多条命令原子性问题
 
@@ -2603,15 +2603,15 @@ return name
 
 写好脚本以后，需要用Redis命令来调用脚本，调用脚本的常见命令如下：
 
-![1653392181413](image\Redis实战篇.assets\1653392181413.png)
+![1653392181413](image/Redis实战篇.assets/1653392181413.png)
 
 例如，我们要执行 redis.call('set', 'name', 'jack') 这个脚本，语法如下：
 
-![1653392218531](image\Redis实战篇.assets\1653392218531.png)
+![1653392218531](image/Redis实战篇.assets/1653392218531.png)
 
 如果脚本中的key、value不想写死，可以作为参数传递。key类型参数会放入KEYS数组，其它参数会放入ARGV数组，在脚本中可以从KEYS和ARGV数组获取这些参数：
 
-![1653392438917](image\Redis实战篇.assets\1653392438917.png)
+![1653392438917](image/Redis实战篇.assets/1653392438917.png)
 
 接下来我们来回一下我们释放锁的逻辑：
 
@@ -2648,7 +2648,7 @@ lua脚本本身并不需要大家花费太多时间去研究，只需要知道�
 
 我们的RedisTemplate中，可以利用execute方法去执行lua脚本，参数对应关系就如下图股
 
-![1653393304844](image\Redis实战篇.assets\1653393304844.png)
+![1653393304844](image/Redis实战篇.assets/1653393304844.png)
 
 **Java代码**
 
@@ -2810,7 +2810,7 @@ public class SimpleRedisLock implements ILock{
 
 **主从一致性：** 如果Redis提供了主从集群，当我们向集群写数据时，主机需要异步的将数据同步给从机，而万一在同步过去之前，主机宕机了，就会出现死锁问题。
 
-![1653546070602](image\Redis实战篇.assets\1653546070602.png)
+![1653546070602](image/Redis实战篇.assets/1653546070602.png)
 
 那么什么是Redisson呢
 
@@ -2818,7 +2818,7 @@ Redisson是一个在Redis的基础上实现的Java驻内存数据网格（In-Mem
 
 Redisson提供了分布式锁的多种多样的功能
 
-![1653546736063](image\Redis实战篇.assets\1653546736063.png)
+![1653546736063](image/Redis实战篇.assets/1653546736063.png)
 
 ## 5.2 分布式锁-Redisson快速入门
 
@@ -2930,7 +2930,7 @@ public Result seckillVoucher(Long voucherId) {
 
 在Lock锁中，他是借助于底层的一个voaltile的一个state变量来记录重入的状态的，比如当前没有人持有这把锁，那么state=0，假如有人持有这把锁，那么state=1，如果持有这把锁的人再次持有这把锁，那么state就会+1 ，如果是对于synchronized而言，他在c语言代码中会有一个count，原理和state类似，也是重入一次就加一，释放一次就-1 ，直到减少成0 时，表示当前这把锁没有被人持有。  
 
-![1653548087334](image\Redis实战篇.assets\1653548087334.png)
+![1653548087334](image/Redis实战篇.assets/1653548087334.png)
 
 在redission中，我们的也支持支持可重入锁
 
@@ -3077,11 +3077,11 @@ private void renewExpiration() {
 
 此时我们去写命令，写在主机上， 主机会将数据同步给从机，但是假设在主机还没有来得及把数据写入到从机去的时候，此时主机宕机，哨兵会发现主机宕机，并且选举一个slave变成master，而此时新的master中实际上并没有锁信息，此时锁信息就已经丢掉了，此时如果有另一个线程去从机上获得锁就会成功，造成**一锁被多建多用**。
 
-![1653553998403](image\Redis实战篇.assets\1653553998403.png)
+![1653553998403](image/Redis实战篇.assets/1653553998403.png)
 
 为了解决这个问题，redission提出来了**MutiLock锁**，使用这把锁咱们就**不使用主从**了，**使用多个独立的master**，每个节点的地位都是一样的，这把锁加锁的逻辑需要写入到每一个主丛节点上，只有所有的服务器都写入成功，此时才是加锁成功，假设现在某个节点挂了，那么他去获得锁的时候，只要有一个节点拿不到，都不能算是加锁成功，就保证了加锁的可靠性。
 
-![1653554055048](image\Redis实战篇.assets\1653554055048.png)
+![1653554055048](image/Redis实战篇.assets/1653554055048.png)
 
 
 
@@ -3089,7 +3089,7 @@ private void renewExpiration() {
 
 > **MutiLock（连锁）：**当我们去设置了多个锁时，redission会将多个锁添加到一个集合中，然后用while循环去不停去尝试拿锁，但是会有一个总共的加锁时间，这个时间是用 需要加锁的个数 * 1500ms ，假设有3个锁，那么时间就是4500ms，假设在这4500ms内，所有的锁都加锁成功（获取到的锁会放到一个acquiredLocks列表里），那么此时才算是加锁成功，如果在4500ms有线程加锁失败，则会释放掉所有已经获得成功的锁，再次去进行重试。
 
-![1653553093967](image\Redis实战篇.assets\1653553093967.png)
+![1653553093967](image/Redis实战篇.assets/1653553093967.png)
 
 
 
@@ -3220,7 +3220,7 @@ if(lock.isLocked() && lock.isHeldByCurrentThread()){
 
 在这里笔者想给大家分享一下课程内没有的思路，看看有没有小伙伴这么想，比如，我们可以不可以使用异步编排来做，或者说我开启N多线程，N多个线程，一个线程执行查询优惠卷，一个执行判断扣减库存，一个去创建订单等等，然后再统一做返回，这种做法和课程中有哪种好呢？答案是课程中的好，因为如果你采用我刚说的方式，如果访问的人很多，那么线程池中的线程可能一下子就被消耗完了，而且你使用上述方案，最大的特点在于，你觉得时效性会非常重要，但是你想想是吗？并不是，比如我只要确定他能做这件事，然后我后边慢慢做就可以了，我并不需要他一口气做完这件事，所以我们应当采用的是课程中，类似消息队列的方式来完成我们的需求，而不是使用线程池或者是异步编排的方式来完成这个需求
 
-![1653560986599](image\Redis实战篇.assets\1653560986599.png)
+![1653560986599](image/Redis实战篇.assets/1653560986599.png)
 
 
 
@@ -3230,7 +3230,7 @@ if(lock.isLocked() && lock.isHeldByCurrentThread()){
 
 第二个难点是由于我们校验和tomct下单是两个线程，那么我们如何知道到底哪个单他最后是否成功，或者是下单完成，为了完成这件事我们在redis操作完之后，我们会将一些信息返回给前端，同时也会把这些信息丢到异步queue中去，后续操作中，可以通过这个id来查询我们tomcat中的下单逻辑是否完成了。
 
-![1653561657295](image\Redis实战篇.assets\1653561657295.png)
+![1653561657295](image/Redis实战篇.assets/1653561657295.png)
 
 
 
@@ -3240,7 +3240,7 @@ if(lock.isLocked() && lock.isHeldByCurrentThread()){
 
 
 
-![1653562234886](image\Redis实战篇.assets\1653562234886.png)
+![1653562234886](image/Redis实战篇.assets/1653562234886.png)
 
 ## 6.2 秒杀优化-Redis完成秒杀资格判断
 
@@ -3254,7 +3254,7 @@ if(lock.isLocked() && lock.isHeldByCurrentThread()){
 
 4. 开启线程任务，不断从阻塞队列中获取信息，实现异步下单功能
 
-  ![1656080546603](image\Redis实战篇.assets\1656080546603.png)
+  ![1656080546603](image/Redis实战篇.assets/1656080546603.png)
 
 VoucherServiceImpl
 
@@ -3733,7 +3733,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 * 生产者：发送消息到消息队列
 * 消费者：从消息队列获取消息并处理消息
 
-![1653574849336](image\Redis实战篇.assets\1653574849336.png)
+![1653574849336](image/Redis实战篇.assets/1653574849336.png)
 
 使用队列的好处在于 **解耦：**所谓解耦，举一个生活中的例子就是：快递员(生产者)把快递放到快递柜里边(Message Queue)去，我们(消费者)从快递柜里边去拿东西，这就是一个异步，如果耦合，那么这个快递员相当于直接把快递交给你，这事固然好，但是万一你不在家，那么快递员就会一直等你，这就浪费了快递员的时间，所以这种思想在我们日常开发中，是非常有必要的。
 
@@ -3752,7 +3752,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 队列是入口和出口不在一边，因此我们可以利用：LPUSH 结合 RPOP、或者 RPUSH 结合 LPOP来实现。
 不过要注意的是，当队列中没有消息时RPOP或LPOP操作会返回null，并不像JVM的阻塞队列那样会阻塞并等待消息。因此这里应该使用BRPOP或者BLPOP来实现阻塞效果。
 
-![1653575176451](image\Redis实战篇.assets\1653575176451.png)
+![1653575176451](image/Redis实战篇.assets/1653575176451.png)
 
 基于List的消息队列有哪些优缺点？
 优点：
@@ -3776,7 +3776,7 @@ PubSub（发布订阅）是Redis2.0版本引入的消息传递模型。顾名思
  PUBLISH channel msg ：向一个频道发送消息
  PSUBSCRIBE pattern[pattern] ：订阅与pattern格式匹配的所有频道
 
-![1653575506373](image\Redis实战篇.assets\1653575506373.png)
+![1653575506373](image/Redis实战篇.assets/1653575506373.png)
 
 基于PubSub的消息队列有哪些优缺点？
 优点：
@@ -3797,27 +3797,27 @@ Stream 是 Redis 5.0 引入的一种新数据类型，可以实现一个功能�
 
 发送消息的命令：
 
-![1653577301737](image\Redis实战篇.assets\1653577301737.png)
+![1653577301737](image/Redis实战篇.assets/1653577301737.png)
 
 例如：
 
-![1653577349691](image\Redis实战篇.assets\1653577349691.png)
+![1653577349691](image/Redis实战篇.assets/1653577349691.png)
 
 读取消息的方式之一：XREAD
 
-![1653577445413](image\Redis实战篇.assets\1653577445413.png)
+![1653577445413](image/Redis实战篇.assets/1653577445413.png)
 
 例如，使用XREAD读取第一个消息：
 
-![1653577643629](image\Redis实战篇.assets\1653577643629.png)
+![1653577643629](image/Redis实战篇.assets/1653577643629.png)
 
 XREAD阻塞方式，读取最新的消息：
 
-![1653577659166](image\Redis实战篇.assets\1653577659166.png)
+![1653577659166](image/Redis实战篇.assets/1653577659166.png)
 
 在业务开发中，我们可以循环的调用XREAD阻塞方式来查询最新消息，从而实现持续监听队列的效果，伪代码如下
 
-![1653577689129](image\Redis实战篇.assets\1653577689129.png)
+![1653577689129](image/Redis实战篇.assets/1653577689129.png)
 
 注意：当我们指定起始ID为$时，代表读取最新的消息，如果我们处理一条消息的过程中，又有超过1条以上的消息到达队列，则下次获取时也只能获取到最新的一条，会出现漏读消息的问题
 
@@ -3834,10 +3834,10 @@ STREAM类型消息队列的XREAD命令特点：
 
 消费者组（Consumer Group）：将多个消费者划分到一个组中，监听同一个队列。具备下列特点：
 
-![1653577801668](image\Redis实战篇.assets\1653577801668.png)
+![1653577801668](image/Redis实战篇.assets/1653577801668.png)
 
 **创建消费者组：**
-![1653577984924](image\Redis实战篇.assets\1653577984924.png)
+![1653577984924](image/Redis实战篇.assets/1653577984924.png)
 key：队列名称
 groupName：消费者组名称
 ID：起始ID标示，$代表队列中最后一个消息，0则代表队列中第一个消息
@@ -3881,7 +3881,7 @@ XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] [NOACK] STREA
 
 消费者监听消息的基本思路：
 
-![1653578211854](image\Redis实战篇.assets\1653578211854.png)STREAM类型消息队列的XREADGROUP命令特点：
+![1653578211854](image/Redis实战篇.assets/1653578211854.png)STREAM类型消息队列的XREADGROUP命令特点：
 
 * 消息可回溯
 * 可以多消费者争抢消息，加快消费速度
@@ -3891,7 +3891,7 @@ XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] [NOACK] STREA
 
 最后我们来个小对比
 
-![1653578560691](image\Redis实战篇.assets\1653578560691.png)
+![1653578560691](image/Redis实战篇.assets/1653578560691.png)
 
 ## 7.6 基于Redis的Stream结构作为消息队列，实现异步秒杀下单
 
@@ -3911,7 +3911,7 @@ redis> XGROUP create stream.orders g1 0 mkstream
 
 修改lua表达式,新增3.6 
 
-![1656082824939](image\Redis实战篇.assets\1656082824939.png)
+![1656082824939](image/Redis实战篇.assets/1656082824939.png)
 
 VoucherOrderServiceImpl
 
@@ -3999,7 +3999,7 @@ tb_blog_comments：其他用户对探店笔记的评价
 
 **具体发布流程**
 
-![1653578992639](image\Redis实战篇.assets\1653578992639.png)
+![1653578992639](image/Redis实战篇.assets/1653578992639.png)
 
 上传接口
 
@@ -4058,7 +4058,7 @@ public class BlogController {
 
 实现查看发布探店笔记的接口
 
-![1653579931626](image\Redis实战篇.assets\1653579931626.png)
+![1653579931626](image/Redis实战篇.assets/1653579931626.png)
 
 实现代码：
 
@@ -4096,7 +4096,7 @@ public Result queryBlogLikes(@PathVariable("id") Long id) {
 
 造成这个问题的原因是，我们现在的逻辑，发起请求只是给数据库+1，所以才会出现这个问题
 
-![1653581590453](image\Redis实战篇.assets\1653581590453.png)
+![1653581590453](image/Redis实战篇.assets/1653581590453.png)
 
 完善点赞功能
 
@@ -4160,7 +4160,7 @@ private Boolean isLike;
 
 之前的点赞是放到set集合，但是set集合是不能排序的，所以这个时候，咱们可以采用一个可以排序的set集合，就是咱们的sortedSet
 
-![1653805077118](image\Redis实战篇.assets\1653805077118.png)
+![1653805077118](image/Redis实战篇.assets/1653805077118.png)
 
 我们接下来来对比一下这些集合的区别是什么
 
@@ -4168,7 +4168,7 @@ private Boolean isLike;
 
 其次我们需要排序，就可以直接锁定使用sortedSet啦
 
-![1653805203758](image\Redis实战篇.assets\1653805203758.png)
+![1653805203758](image/Redis实战篇.assets/1653805203758.png)
 
 修改代码
 
@@ -4263,7 +4263,7 @@ public Result queryBlogLikes(Long id) {
 
 针对用户的操作：可以对用户进行关注和取消关注功能。
 
-![1653806140822](image\Redis实战篇.assets\1653806140822.png)
+![1653806140822](image/Redis实战篇.assets/1653806140822.png)
 
 实现思路：
 
@@ -4274,7 +4274,7 @@ public Result queryBlogLikes(Long id) {
 
 关注是User之间的关系，是博主与粉丝的关系，数据库中有一张tb_follow表来标示：
 
-![1653806253817](image\Redis实战篇.assets\1653806253817.png)
+![1653806253817](image/Redis实战篇.assets/1653806253817.png)
 
 注意: 这里需要把主键修改为自增长，简化开发。
 
@@ -4341,7 +4341,7 @@ public Result isFollow(Long followUserId) {
 
 以上两个功能和共同关注没有什么关系，大家可以自行将笔记中的代码拷贝到idea中就可以实现这两个功能了，我们的重点在于共同关注功能。
 
-![1653806706296](image\Redis实战篇.assets\1653806706296.png)
+![1653806706296](image/Redis实战篇.assets/1653806706296.png)
 
 ```java
 // UserController 根据id查询用户
@@ -4377,7 +4377,7 @@ public Result queryBlogByUserId(
 
 当然是使用我们之前学习过的set集合咯，在set集合中，有交集并集补集的api，我们可以把两人的关注的人分别放入到一个set集合中，然后再通过api去查看这两个set集合中的交集数据。
 
-![1653806973212](image\Redis实战篇.assets\1653806973212.png)
+![1653806973212](image/Redis实战篇.assets/1653806973212.png)
 
 我们先来改造当前的关注列表
 
@@ -4449,13 +4449,13 @@ public Result followCommons(Long id) {
 
 对于传统的模式的内容解锁：我们是需要用户去通过搜索引擎或者是其他的方式去解锁想要看的内容
 
-![1653808641260](image\Redis实战篇.assets\1653808641260.png)
+![1653808641260](image/Redis实战篇.assets/1653808641260.png)
 
 
 
 对于新型的Feed流的的效果：不需要我们用户再去推送信息，而是系统分析用户到底想要什么，然后直接把内容推送给用户，从而使用户能够更加的节约时间，不用主动去寻找。
 
-![1653808993693](image\Redis实战篇.assets\1653808993693.png)
+![1653808993693](image/Redis实战篇.assets/1653808993693.png)
 
 Feed流的实现有两种模式：
 
@@ -4487,7 +4487,7 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 
 缺点：比较延迟，当用户读取数据时才去关注的人里边去读取数据，假设用户关注了大量的用户，那么此时就会拉取海量的内容，对服务器压力巨大。
 
-![1653809450816](image\Redis实战篇.assets\1653809450816.png)
+![1653809450816](image/Redis实战篇.assets/1653809450816.png)
 
 
 
@@ -4499,13 +4499,13 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 
 缺点：内存压力大，假设一个大V写信息，很多人关注他， 就会写很多分数据到粉丝那边去
 
-![1653809875208](image\Redis实战篇.assets\1653809875208.png)
+![1653809875208](image/Redis实战篇.assets/1653809875208.png)
 
 **推拉结合模式**：也叫做读写混合，兼具推和拉两种模式的优点。
 
 推拉模式是一个折中的方案，站在发件人这一段，如果是个普通的人，那么我们采用写扩散的方式，直接把数据写入到他的粉丝中去，因为普通的人他的粉丝关注量比较小，所以这样做没有压力，如果是大V，那么他是直接将数据先写入到一份到发件箱里边去，然后再直接写一份到活跃粉丝收件箱里边去，现在站在收件人这端来看，如果是活跃粉丝，那么大V和普通的人发的都会直接写入到自己收件箱里边来，而如果是普通的粉丝，由于他们上线不是很频繁，所以等他们上线时，再从发件箱里边去拉信息。
 
-![1653812346852](image\Redis实战篇.assets\1653812346852.png)
+![1653812346852](image/Redis实战篇.assets/1653812346852.png)
 
 
 
@@ -4523,7 +4523,7 @@ Feed流中的数据会不断更新，所以数据的角标也在变化，因此�
 
 假设在t1 时刻，我们去读取第一页，此时page = 1 ，size = 5 ，那么我们拿到的就是10~6 这几条记录，假设现在t2时候又发布了一条记录，此时t3 时刻，我们来读取第二页，读取第二页传入的参数是page=2 ，size=5 ，那么此时读取到的第二页实际上是从6 开始，然后是6~2 ，那么我们就读取到了重复的数据，所以feed流的分页，不能采用原始方案来做。
 
-![1653813047671](image\Redis实战篇.assets\1653813047671.png)
+![1653813047671](image/Redis实战篇.assets/1653813047671.png)
 
 Feed流的滚动分页
 
@@ -4531,7 +4531,7 @@ Feed流的滚动分页
 
 举个例子：我们从t1时刻开始，拿第一页数据，拿到了10~6，然后记录下当前最后一次拿取的记录，就是6，t2时刻发布了新的记录，此时这个11放到最顶上，但是不会影响我们之前记录的6，此时t3时刻来拿第二页，第二页这个时候拿数据，还是从6后一点的5去拿，就拿到了5-1的记录。我们这个地方可以采用sortedSet来做，可以进行范围查询，并且还可以记录当前获取数据时间戳最小值，就可以实现滚动分页了
 
-![1653813462834](image\Redis实战篇.assets\1653813462834.png)
+![1653813462834](image/Redis实战篇.assets/1653813462834.png)
 
 核心的意思：就是我们在保存完探店笔记后，获得到当前笔记的粉丝，然后把数据推送到粉丝的redis中去。
 
@@ -4575,7 +4575,7 @@ public Result saveBlog(Blog blog) {
 
 这两个参数第一次会由前端来指定，以后的查询就根据后台结果作为条件，再次传递到后台。
 
-![1653819821591](image\Redis实战篇.assets\1653819821591.png)
+![1653819821591](image/Redis实战篇.assets/1653819821591.png)
 
 一、定义出来具体的返回值实体类
 
@@ -4673,13 +4673,13 @@ GEO就是Geolocation的简写形式，代表地理坐标。Redis在3.2版本中�
 
 具体场景说明：
 
-![1653822036941](image\Redis实战篇.assets\1653822036941.png)
+![1653822036941](image/Redis实战篇.assets/1653822036941.png)
 
 
 
 当我们点击美食之后，会出现一系列的商家，商家中可以按照多种排序方式，我们此时关注的是距离，这个地方就需要使用到我们的GEO，向后台传入当前app收集的地址(我们此处是写死的) ，以当前坐标作为圆心，同时绑定相同的店家类型type，以及分页信息，把这几个条件传入后台，后台查询出对应的数据再返回。
 
-![1653822021827](image\Redis实战篇.assets\1653822021827.png)
+![1653822021827](image/Redis实战篇.assets/1653822021827.png)
 
 我们要做的事情是：将数据库表中的数据导入到redis中去，redis中的GEO，GEO在redis中就一个menber和一个经纬度，我们把x和y轴传入到redis做的经纬度位置去，但我们不能把所有的数据都放入到menber中去，毕竟作为redis是一个内存级数据库，如果存海量数据，redis还是力不从心，所以我们在这个地方存储他的id即可。
 
@@ -4833,7 +4833,7 @@ ShopServiceImpl
 
 我们针对签到功能完全可以通过mysql来完成，比如说以下这张表
 
-![1653823145495](image\Redis实战篇.assets\1653823145495.png)
+![1653823145495](image/Redis实战篇.assets/1653823145495.png)
 
 用户一次签到，就是一条记录，假如有1000万用户，平均每人每年签到次数为10次，则这张表一年的数据量为 1亿条
 
@@ -4849,7 +4849,7 @@ ShopServiceImpl
 
 **Redis中是利用string类型数据结构实现BitMap，因此最大上限是512M**，转换为bit则是 2^32个bit位。
 
-![1653824498278](image\Redis实战篇.assets\1653824498278.png)
+![1653824498278](image/Redis实战篇.assets/1653824498278.png)
 
 BitMap的操作命令有：
 
@@ -4869,7 +4869,7 @@ BitMap的操作命令有：
 
 我们通过接口文档发现，此接口并没有传递任何的参数，没有参数怎么确实是哪一天签到呢？这个很容易，可以通过后台代码直接获取即可，然后到对应的地址上去修改bitMap。
 
-![1653833970361](image\Redis实战篇.assets\1653833970361.png)
+![1653833970361](image/Redis实战篇.assets/1653833970361.png)
 
 **代码**
 
@@ -4907,7 +4907,7 @@ public Result sign() {
 **问题1：**什么叫做连续签到天数？
 从最后一次签到开始向前统计，直到遇到第一次未签到为止，计算总的签到次数，就是连续签到天数。
 
-![1653834455899](image\Redis实战篇.assets\1653834455899.png)
+![1653834455899](image/Redis实战篇.assets/1653834455899.png)
 
 Java逻辑代码：获得当前这个月的最后一次签到数据，定义一个计数器，然后不停的向前统计，直到获得第一个非0的数字即可，每得到一个非0的数字计数器+1，直到遍历完所有的数据，就可以获得当前月的签到总天数了
 
@@ -4927,7 +4927,7 @@ Java逻辑代码：获得当前这个月的最后一次签到数据，定义一�
 
 
 
-![1653835784444](image\Redis实战篇.assets\1653835784444.png)
+![1653835784444](image/Redis实战篇.assets/1653835784444.png)
 
 代码
 
@@ -5006,7 +5006,7 @@ public Result signCount() {
 
 我们可以将数据库的数据，所对应的id写入到一个list集合中，当用户过来访问的时候，我们直接去判断list中是否包含当前的要查询的数据，如果说用户要查询的id数据并不在list集合中，则直接返回，如果list中包含对应查询的id数据，则说明不是一次缓存穿透数据，则直接放行。
 
-![1653836416586](image\Redis实战篇.assets\1653836416586.png)
+![1653836416586](image/Redis实战篇.assets/1653836416586.png)
 
 现在的问题是这个主键其实并没有那么短，而是很长的一个 主键
 
@@ -5020,7 +5020,7 @@ id % bitmap.size  = 算出当前这个id对应应该落在bitmap的哪个索引�
 
 
 
-![1653836578970](image\Redis实战篇.assets\1653836578970.png)
+![1653836578970](image/Redis实战篇.assets/1653836578970.png)
 
 
 
@@ -5040,12 +5040,12 @@ UV统计在服务端做会比较麻烦，因为要判断该用户是否已经统
 Hyperloglog(HLL)是从Loglog算法派生的概率算法，用于确定非常大的集合的基数，而不需要存储其所有值。相关算法原理大家可以参考：https://juejin.cn/post/6844903785744056333#heading-0
 Redis中的**HLL是基于string结构实现**的，单个HLL的内存**永远小于16kb**，**内存占用低**的令人发指！作为代价，其测量结果是概率性的，**有小于0.81％的误差**。不过对于UV统计来说，这完全可以忽略。
 
-![1653837988985](image\Redis实战篇.assets\1653837988985.png)
+![1653837988985](image/Redis实战篇.assets/1653837988985.png)
 
 ## 12.2 UV统计-测试百万数据的统计
 
 测试思路：我们直接利用单元测试，向HyperLogLog中添加100万条数据，看看内存占用和统计效果如何
 
-![1653838053608](image\Redis实战篇.assets\1653838053608.png)
+![1653838053608](image/Redis实战篇.assets/1653838053608.png)
 
 经过测试：我们会发生他的误差是在允许范围内，并且内存占用极小
