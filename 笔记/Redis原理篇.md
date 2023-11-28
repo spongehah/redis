@@ -1,6 +1,8 @@
 #  Redis原理篇
 
-# 1、原理篇-Redis六种数据结构和五种数据类型	
+# 1、原理篇-Redis六种数据结构和五种数据类型
+
+> 笔记原件来自黑马B站视频配套笔记，经过自己加工修改添加等
 
 ## 1.1 Redis数据结构-动态字符串SDS
 
@@ -1157,6 +1159,16 @@ Redis通过IO多路复用来提高网络性能，并且支持各种不同的多�
 >    - 服务端ssfd的作用是当有客户端请求进来时**调用连接应答处理器tcpAcceptHandler**对客户端socket进行连接，注册监听其中的fd并绑定readQueryFromClient(**类似客户端的epoll_ctl**)(对应ssfd可读)
 >    - 客户端fd有两种（对应ssfd不可读），一种是**读事件**，发生在客户端fd刚注册绑定好过后(**即IO多路复用模型中第一阶段的系统调用**)，会**调用读命令请求处理器readQueryFromClient**：先通过客户端连接对象conn得到客户端对象client，将客户端连接conn中的请求数据写入该客户端对象client的querybuffer，然后解析querybuffer中的数据转换为Redis命令存入argv数组中，然后客户端拿出argv数组中的命令选择执行Redis命令后得到执行结果，先将结果写入该客户端对象client的buf(客户端写缓冲区)中，如果写不下就写入客户端对象client的reply链表中(容量无上限)，将客户端添加到server.clients_pending_write这个队列，等待被写出(自此，**IO多路复用模型中第一阶段的等待数据完成**)
 >    - 另一种是**写事件**，在第4步时因为每次调用aeApiPoll前都会调用beforeSleep，而beforeSleep会遍历server.clients_pending_write队列检查是否有准备好数据的client，并会对该队列中的每个client都绑定上了写命令回复处理器，当该client有数据准备好时即**调用绑定的写命令回复处理器sendReplyToClient**，把准备好的响应数据写到客户端socket发送给客户端(**即IO多路复用模型中第二阶段返回数据给用户进程的过程**)
+
+> 参考一下大佬写的流程(引自 [Redis 多线程网络模型全面揭秘](https://segmentfault.com/a/1190000039223696))：
+>
+> 1. Redis 服务器启动，开启主线程事件循环（Event Loop），注册 `acceptTcpHandler` 连接应答处理器到用户配置的监听端口对应的文件描述符，等待新连接到来；
+> 2. 客户端和服务端建立网络连接；
+> 3. `acceptTcpHandler` 被调用，主线程使用 AE 的 API 将 `readQueryFromClient` 命令读取处理器绑定到新连接对应的文件描述符上，并初始化一个 `client` 绑定这个客户端连接；
+> 4. 客户端发送请求命令，触发读就绪事件，主线程调用 `readQueryFromClient` 通过 socket 读取客户端发送过来的命令存入 `client->querybuf` 读入缓冲区；
+> 5. 接着调用 `processInputBuffer`，在其中使用 `processInlineBuffer` 或者 `processMultibulkBuffer` 根据 Redis 协议解析命令，最后调用 `processCommand` 执行命令；
+> 6. 根据请求命令的类型（SET, GET, DEL, EXEC 等），分配相应的命令执行器去执行，最后调用 `addReply` 函数族的一系列函数将响应数据写入到对应 `client` 的写出缓冲区：`client->buf` 或者 `client->reply` ，`client->buf` 是首选的写出缓冲区，固定大小 16KB，一般来说可以缓冲足够多的响应数据，但是如果客户端在时间窗口内需要响应的数据非常大，那么则会自动切换到 `client->reply` 链表上去，使用链表理论上能够保存无限大的数据（受限于机器的物理内存），最后把 `client` 添加进一个 LIFO 队列 `clients_pending_write`；
+> 7. 在事件循环（Event Loop）中，主线程执行 `beforeSleep` --> `handleClientsWithPendingWrites`，遍历 `clients_pending_write` 队列，调用 `writeToClient` 把 `client` 的写出缓冲区里的数据回写到客户端，如果写出缓冲区还有数据遗留，则注册 `sendReplyToClient` 命令回复处理器到该连接的写就绪事件，等待客户端可写时在事件循环中再继续回写残余的响应数据。
 
 中间三个即 **IO多路复用 + 事件派发**：
 
