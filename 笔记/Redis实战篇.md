@@ -128,7 +128,7 @@ http://localhost:8081/shop-type/list
         // 5.发送验证码
         log.debug("发送短信验证码成功，验证码：{}", code);
         // 返回ok
-        return Result.ok();
+        return Result.ok(code);
     }
 ```
 
@@ -226,9 +226,6 @@ public class LoginInterceptor implements HandlerInterceptor {
 @Configuration
 public class MvcConfig implements WebMvcConfigurer {
 
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
-
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         // 登录拦截器
@@ -241,9 +238,7 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/blog/hot",
                         "/user/code",
                         "/user/login"
-                ).order(1);
-        // token刷新的拦截器
-        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).addPathPatterns("/**").order(0);
+                );
     }
 }
 ```
@@ -339,6 +334,22 @@ tomcat服务器**session不共享**
 **UserServiceImpl代码**
 
 ```java
+@Override
+public Result sendCode(String phone, HttpSession session) {
+    //1 校验手机号
+    if (RegexUtils.isPhoneInvalid(phone)) {
+        return Result.fail("手机号格式错误！");
+    }
+    //2 符合，生成验证码
+    String code = RandomUtil.randomNumbers(6);
+    //3 保存验证码到Redis
+    stringRedisTemplate.opsForValue().set(RedisConstants.LOGIN_CODE_KEY + phone, code, RedisConstants.LOGIN_CODE_TTL, TimeUnit.MINUTES);
+    //4 TODO 发送验证码（使用阿里云等），这里只简单打印
+    log.debug("发送短信验证码成功，验证码：{}", code);
+    //5 返回OK
+    return Result.ok();
+}
+
 @Override
 public Result login(LoginFormDTO loginForm, HttpSession session) {
     // 1.校验手机号
@@ -464,7 +475,33 @@ public class LoginInterceptor implements HandlerInterceptor {
 }
 ```
 
+**MvcConfig**
 
+```java
+@Configuration
+public class MvcConfig implements WebMvcConfigurer {
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // 登录拦截器
+        registry.addInterceptor(new LoginInterceptor())
+                .excludePathPatterns(
+                        "/shop/**",
+                        "/voucher/**",
+                        "/shop-type/**",
+                        "/upload/**",
+                        "/blog/hot",
+                        "/user/code",
+                        "/user/login"
+                ).order(1);
+        // token刷新的拦截器
+        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).addPathPatterns("/**").order(0);
+    }
+}
+```
 
 # 2、商户查询缓存
 
@@ -610,7 +647,7 @@ public Result queryById(Long id) {
 
 ![1653322506393](image/Redis实战篇.assets/1653322506393.png)
 
-### 2.3.1 、数据库缓存不一致解决方案：
+### 2.3.1 、数据库缓存不一致的3种解决方案：
 
 
 
@@ -625,6 +662,79 @@ Read/Write Through Pattern : 由系统本身完成，数据库与缓存的问题
 Write Behind Caching Pattern ：调用者只操作缓存，其他线程去异步处理数据库，实现最终一致
 
 ![1653322857620](image/Redis实战篇.assets/1653322857620.png)
+
+> 以下部分截取自JavaGuide：
+>
+> - **`1 Cache Aside Pattern（旁路缓存模式）`**
+>
+> **Cache Aside Pattern 是我们平时使用比较多的一个缓存读写模式，比较适合读请求比较多的场景。**
+>
+> Cache Aside Pattern 中服务端需要同时维系 db 和 cache，并且是以 db 的结果为准。
+>
+> 下面我们来看一下这个策略模式下的缓存读写步骤。
+>
+> **写**：
+>
+> - 先更新 db
+> - 然后直接删除 cache 。
+>
+> 简单画了一张图帮助大家理解写的步骤。
+>
+> ![img](image/Redis实战篇.assets/cache-aside-write.png)
+>
+> **读** :
+>
+> - 从 cache 中读取数据，读取到就直接返回
+> - cache 中读取不到的话，就从 db 中读取数据返回
+> - 再把数据放到 cache 中。
+>
+> 简单画了一张图帮助大家理解读的步骤。
+>
+> ![img](image/Redis实战篇.assets/cache-aside-read.png)
+>
+> 
+>
+> - **`2 Read/Write Through Pattern（读写穿透）`**
+>
+> Read/Write Through Pattern 中服务端把 cache 视为主要数据存储，从中读取数据并将数据写入其中。cache 服务负责将此数据读取和写入 db，从而减轻了应用程序的职责。
+>
+> 这种缓存读写策略小伙伴们应该也发现了在平时在开发过程中非常少见。抛去性能方面的影响，大概率是因为我们经常使用的分布式缓存 Redis 并没有提供 cache 将数据写入 db 的功能。
+>
+> **写（Write Through）：**
+>
+> - 先查 cache，cache 中不存在，直接更新 db。
+> - cache 中存在，则先更新 cache，然后 cache 服务自己更新 db（**同步更新 cache 和 db**）。
+>
+> 简单画了一张图帮助大家理解写的步骤。
+>
+> ![img](image/Redis实战篇.assets/write-through.png)
+>
+> **读(Read Through)：**
+>
+> - 从 cache 中读取数据，读取到就直接返回 。
+> - 读取不到的话，先从 db 加载，写入到 cache 后返回响应。
+>
+> 简单画了一张图帮助大家理解读的步骤。
+>
+> ![img](image/Redis实战篇.assets/read-through.png)
+>
+> Read-Through Pattern 实际只是在 Cache-Aside Pattern 之上进行了封装。在 Cache-Aside Pattern 下，发生读请求的时候，如果 cache 中不存在对应的数据，是由客户端自己负责把数据写入 cache，而 Read Through Pattern 则是 cache 服务自己来写入缓存的，这对客户端是透明的。
+>
+> 和 Cache Aside Pattern 一样， Read-Through Pattern 也有首次请求数据一定不再 cache 的问题，对于热点数据可以提前放入缓存中。
+>
+> 
+>
+> - **`3 Write Behind Pattern（异步缓存写入）`**
+>
+> Write Behind Pattern 和 Read/Write Through Pattern 很相似，两者都是由 cache 服务来负责 cache 和 db 的读写。
+>
+> 但是，两个又有很大的不同：**Read/Write Through 是同步更新 cache 和 db，而 Write Behind 则是只更新缓存，不直接更新 db，而是改为异步批量的方式来更新 db。**
+>
+> 很明显，这种方式对数据一致性带来了更大的挑战，比如 cache 数据可能还没异步更新 db 的话，cache 服务可能就就挂掉了。
+>
+> 这种策略在我们平时开发过程中也非常非常少见，但是不代表它的应用场景少，比如消息队列中消息的异步写入磁盘、MySQL 的 Innodb Buffer Pool 机制都用到了这种策略。
+>
+> Write Behind Pattern 下 db 的写性能非常高，非常适合一些数据经常变化又对数据一致性要求没那么高的场景，比如浏览量、点赞量。
 
 ### 2.3.2 、数据库和缓存不一致采用什么方案
 
@@ -652,7 +762,17 @@ Write Behind Caching Pattern ：调用者只操作缓存，其他线程去异步
 
 ![1653323595206](image/Redis实战篇.assets/1653323595206.png)
 
-
+> 1. 先删后改：
+>    - 如上图，若两个线程穿插，由于线程1更新数据库较慢，所以线程2的情况很可能发生
+> 2. 先改后删：
+>    - 如上图，若两个线程穿插，需要满足下列条件：
+>      ①线程1查询缓存时缓存**刚好失效**，
+>      ②由于线程1**写入缓存速度很快**，线程2在极短的时间内完成更新数据库和删除缓存操作；
+>      综合以上两点，先改后删发送不一致的概率较小
+>    - 还有一种情况：MySQL是主从模式下，我们删除缓存过后，紧接着有个请求来读从库，但是由于主从延迟，从库还是旧数据，于是缓存的还是旧数据
+>      解决：
+>      1 延迟双删：比如延迟一秒后再次删除缓存
+>      2 基于订阅binlog去做缓存删除操作：比如使用中间件Canal
 
 ### 2.3.3、策略总结
 
@@ -1115,7 +1235,11 @@ private Result queryWithMutex(Long id) {
         }
     }
     try {
-        // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
+        //double check
+        shopJson = stringRedisTemplate.opsForValue().get(key);
+        if(StrUtil.isNotBlank(shopJson)) {
+            return Result.ok(JSONUtil.toBean(shopJson, Shop.class));
+        }
 
         // TODO 4.4 成功，根据id查询数据库
         Shop shop = this.getById(id);
@@ -1147,60 +1271,62 @@ private Result queryWithMutex(Long id) {
 
 ```java
 private Result queryWithMutex(Long id) {
-        String key = RedisConstants.CACHE_SHOP_KEY + id;
-        String lockKey = RedisConstants.LOCK_SHOP_KEY + id;
-        // 1 从redis查询商铺缓存
-        String shopJson = stringRedisTemplate.opsForValue().get(key);
-        // 2 判断是否存在
-        if (StrUtil.isNotBlank(shopJson)) {
-            // 3 存在，直接返回
-            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
-            return Result.ok(shop);
+    String key = RedisConstants.CACHE_SHOP_KEY + id;
+    String lockKey = RedisConstants.LOCK_SHOP_KEY + id;
+    // 1 从redis查询商铺缓存
+    String shopJson = stringRedisTemplate.opsForValue().get(key);
+    // 2 判断是否存在
+    if (StrUtil.isNotBlank(shopJson)) {
+        // 3 存在，直接返回
+        Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+        return Result.ok(shop);
+    }
+    /**
+     * isNotBlank()方法会检测到空字符串
+     * 为解决缓存穿透，额外判断是否为""空字符串，是则返回错误信息
+     */
+    if (shopJson != null) {
+        return Result.fail("店铺不存在！");
+    }
+  
+    try {
+        // TODO 4 实现缓存重建
+        // TODO 4.1 获取互斥锁
+        boolean isLock = tryLock(lockKey);
+        // TODO 4.2 判断是否获取成功
+        if (!isLock) {
+            // TODO 4.3 失败：则休眠重试
+            Thread.sleep(50);
+            queryWithMutex(id);
         }
-        /**
-         * isNotBlank()方法会检测到空字符串
-         * 为解决缓存穿透，额外判断是否为""空字符串，是则返回错误信息
-         */
-        if (shopJson != null) {
+        //double check
+        shopJson = stringRedisTemplate.opsForValue().get(key);
+        if(StrUtil.isNotBlank(shopJson)) {
+            return Result.ok(JSONUtil.toBean(shopJson, Shop.class));
+      
+        // TODO 4.4 成功，根据id查询数据库
+        Shop shop = this.getById(id);
+        // 模拟缓存击穿重建业务耗时久情况
+        Thread.sleep(200);
+        // 5 数据库不存在，返回错误
+        if (shop == null) {
+            /**
+             * 为解决缓存穿透，将空值写入redis
+             */
+            stringRedisTemplate.opsForValue().set(key, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
             return Result.fail("店铺不存在！");
         }
-
-        try {
-            // TODO 4 实现缓存重建
-            // TODO 4.1 获取互斥锁
-            boolean isLock = tryLock(lockKey);
-            // TODO 4.2 判断是否获取成功
-            if (!isLock) {
-                // TODO 4.3 失败：则休眠重试
-                Thread.sleep(50);
-                queryWithMutex(id);
-            }
-            // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
-
-            // TODO 4.4 成功，根据id查询数据库
-            Shop shop = this.getById(id);
-            // 模拟缓存击穿重建业务耗时久情况
-            Thread.sleep(200);
-            // 5 数据库不存在，返回错误
-            if (shop == null) {
-                /**
-                 * 为解决缓存穿透，将空值写入redis
-                 */
-                stringRedisTemplate.opsForValue().set(key, "", RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
-                return Result.fail("店铺不存在！");
-            }
-            // 6  存在，写入redis
-            stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
-
-            // 7 存在，返回数据
-            return Result.ok(shop);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        } finally {
-            // TODO 7 释放互斥锁
-            unlock(lockKey);
-        }
+        // 6  存在，写入redis
+        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shop), RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTE
+        // 7 存在，返回数据
+        return Result.ok(shop);
+    } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+    } finally {
+        // TODO 7 释放互斥锁
+        unlock(lockKey);
     }
+}
 ```
 
 
@@ -1305,7 +1431,19 @@ private Result queryWithLogicalExpire(Long id) {
     boolean isLock = this.tryLock(lockKey);
     // TODO 6.2 判断是否获取锁成功
     if (isLock) {
-        // TODO 可以在这里再进行一个double check，如果redis缓存依旧没有数据的话，才查询数据库
+        //double check
+        shopJson = stringRedisTemplate.opsForValue().get(key);
+        redisData = JSONUtil.toBean(shopJson, RedisData.class);
+        data = (JSONObject) redisData.getData();
+        shop = data.toBean(Shop.class);
+        expireTime = redisData.getExpireTime();
+        //double check未过期
+        if(expireTime.isAfter(LocalDateTime.now())) {
+            this.unlock(lockKey);
+            return Result.ok(shop);
+        }
+        
+        //还是过期，开启新线程
         // TODO 6.3 成功，开启独立线程，实现缓存重建你
         CompletableFuture.runAsync(() -> {
             try {
@@ -1352,6 +1490,19 @@ public Shop queryWithLogicalExpire( Long id ) {
     boolean isLock = tryLock(lockKey);
     // 6.2.判断是否获取锁成功
     if (isLock){
+        //double check
+        shopJson = stringRedisTemplate.opsForValue().get(key);
+        redisData = JSONUtil.toBean(shopJson, RedisData.class);
+        data = (JSONObject) redisData.getData();
+        shop = data.toBean(Shop.class);
+        expireTime = redisData.getExpireTime();
+        //double check未过期
+        if(expireTime.isAfter(LocalDateTime.now())) {
+            this.unlock(lockKey);
+            return Result.ok(shop);
+        }
+        
+        //还是过期，开启新线程
         CACHE_REBUILD_EXECUTOR.submit( ()->{
 
             try{
@@ -1802,7 +1953,7 @@ public class RedisIdWorker {
         long timestamp = nowSecond - BEGIN_TIMESTAMP;
         
         //2 生成序列号
-        //2.1 获取当前日期，精确到天
+        //2.1 获取当前日期，精确到天，每天一个key，方便统计
         String date = now.format(DateTimeFormatter.ofPattern("yyyy:MM:dd"));
         //2.2 自增长
         long count = stringRedisTemplate.opsForValue().increment("icr:" + keyPrefix + ":" + date);
@@ -1847,7 +1998,7 @@ void testIdWorker() throws InterruptedException {
     };
     long begin = System.currentTimeMillis();
     for (int i = 0; i < 300; i++) {
-        es.submit(task);
+        threadPool.submit(task);
     }
     latch.await();
     long end = System.currentTimeMillis();
@@ -1905,8 +2056,6 @@ public void addSeckillVoucher(Voucher voucher) {
     seckillVoucher.setBeginTime(voucher.getBeginTime());
     seckillVoucher.setEndTime(voucher.getEndTime());
     seckillVoucherService.save(seckillVoucher);
-    // 保存秒杀库存到Redis中
-    stringRedisTemplate.opsForValue().set(SECKILL_STOCK_KEY + voucher.getId(), voucher.getStock().toString());
 }
 ```
 
@@ -2007,18 +2156,18 @@ public Result seckillVoucher(Long voucherId) {
 有关超卖问题分析：在我们原有代码中是这么写的
 
 ```java
- if (voucher.getStock() < 1) {
-        // 库存不足
-        return Result.fail("库存不足！");
-    }
-    //5，扣减库存
-    boolean success = seckillVoucherService.update()
-            .setSql("stock= stock -1")
-            .eq("voucher_id", voucherId).update();
-    if (!success) {
-        //扣减库存
-        return Result.fail("库存不足！");
-    }
+if (voucher.getStock() < 1) {
+    // 库存不足
+    return Result.fail("库存不足！");
+}
+//5，扣减库存
+boolean success = seckillVoucherService.update()
+        .setSql("stock= stock -1")
+        .eq("voucher_id", voucherId).update();
+if (!success) {
+    //扣减库存
+    return Result.fail("库存不足！");
+}
 ```
 
 假设线程1过来查询库存，判断出来库存大于1，正准备去扣减库存，但是还没有来得及去扣减，此时线程2过来，线程2也去查询库存，发现这个数量一定也大于1，那么这两个线程都会去扣减库存，最终多个线程相当于一起去扣减库存，此时就会出现库存的超卖问题。
@@ -2070,14 +2219,14 @@ boolean success = seckillVoucherService.update()
 
 以上逻辑的核心含义是：只要我扣减库存时的库存和之前我查询到的库存是一样的，就意味着没有人在中间修改过库存，那么此时就是安全的，但是以上这种方式通过测试发现会有很多失败的情况，失败的原因在于：在使用乐观锁过程中假设100个线程同时都拿到了100的库存，然后大家一起去进行扣减，但是100个人中只有1个人能扣减成功，其他的人在处理时，他们在扣减时，库存已经被修改过了，所以此时其他线程都会失败
 
-**修改代码方案二、**
+**改进：修改代码方案二、**
 
-之前的方式要修改前后都保持一致，但是这样我们分析过，成功的概率太低，所以我们的乐观锁需要变一下，改成stock大于0 即可
+之前的方式要修改前后都保持一致，但是这样我们分析过，**成功的概率太低**，所以我们的乐观锁需要变一下，改成stock大于0 即可
 
 ```java
 boolean success = seckillVoucherService.update()
             .setSql("stock= stock -1")
-            .eq("voucher_id", voucherId).update().gt("stock",0); //where id = ? and stock > 0
+            .eq("voucher_id", voucherId).gt("stock",0).update(); //where id = ? and stock > 0
 ```
 
 **测试：**
@@ -2656,11 +2805,11 @@ lua脚本本身并不需要大家花费太多时间去研究，只需要知道�
 
 ```java
 private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
-    static {
-        UNLOCK_SCRIPT = new DefaultRedisScript<>();
-        UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
-        UNLOCK_SCRIPT.setResultType(Long.class);
-    }
+ static {
+     UNLOCK_SCRIPT = new DefaultRedisScript<>();
+     UNLOCK_SCRIPT.setLocation(new ClassPathResource("unlock.lua"));
+     UNLOCK_SCRIPT.setResultType(Long.class);
+ }
 
 /**
  * 使用lua脚本保证比锁删锁的原子性
@@ -2850,7 +2999,6 @@ public class RedissonConfig {
         return Redisson.create(config);
     }
 }
-
 ```
 
 如何使用Redisson的分布式锁
@@ -3108,6 +3256,8 @@ RLock multiLock = redissonClient.getMultiLock(lock1, lock2, lock3);
 
 ## 5.6 分布式锁-redission锁的红锁RedLock
 
+> RedLock已被弃用
+
 RedLock解决的问题和联锁一样，都是为了解决单机情况下的**单点故障问题**或者主从模式下的**一锁多建多用问题**
 
 仍然采用的是 **多台 独立的 master主节点**，数量可为**大于等于3的奇数**，官方推荐数量为5
@@ -3288,8 +3438,6 @@ public void addSeckillVoucher(Voucher voucher) {
 local voucherId = ARGV[1]
 -- 1.2.用户id
 local userId = ARGV[2]
--- 1.3.订单id
-local orderId = ARGV[3]
 
 -- 2.数据key
 -- 2.1.库存key
@@ -3312,8 +3460,6 @@ end
 redis.call('incrby', stockKey, -1)
 -- 3.5.下单（保存用户）sadd orderKey userId
 redis.call('sadd', orderKey, userId)
--- 3.6.发送消息到队列中， XADD stream.orders * k1 v1 k2 v2 ...
-redis.call('xadd', 'stream.orders', '*', 'userId', userId, 'voucherId', voucherId, 'id', orderId)
 return 0
 ```
 
@@ -3340,7 +3486,8 @@ public Result seckillVoucher(Long voucherId) {
     Long result = stringRedisTemplate.execute(
             SECKILL_SCRIPT,
             Collections.emptyList(),
-            voucherId.toString(), userId.toString(), String.valueOf(orderId)
+            voucherId.toString(), 
+        	userId.toString()
     );
     int r = result.intValue();
     // 2.判断结果是否为0
@@ -3441,18 +3588,17 @@ VoucherOrderServiceImpl
 **老师的：**
 
 ```java
-//异步处理线程池
-private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
+    //异步处理线程池
+    private static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
 
-//在类初始化之后执行，因为当这个类初始化好了之后，随时都是有可能要执行的
-@PostConstruct
-private void init() {
-   SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
-}
-// 用于线程池处理的任务
-// 当初始化完毕后，就会去从对列中去拿信息
- private class VoucherOrderHandler implements Runnable{
-
+    //在类初始化之后执行，因为当这个类初始化好了之后，随时都是有可能要执行的
+    @PostConstruct
+    private void init() {
+       SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
+    }
+    // 用于线程池处理的任务
+    // 当初始化完毕后，就会去从对列中去拿信息
+    private class VoucherOrderHandler implements Runnable{
         @Override
         public void run() {
             while (true){
@@ -3464,37 +3610,36 @@ private void init() {
                 } catch (Exception e) {
                     log.error("处理订单异常", e);
                 }
-          	 }
+             }
         }
-     
-       private void handleVoucherOrder(VoucherOrder voucherOrder) {
-            //1.获取用户
-            Long userId = voucherOrder.getUserId();
-            // 2.创建锁对象
-            RLock redisLock = redissonClient.getLock("lock:order:" + userId);
-            // 3.尝试获取锁
-            boolean isLock = redisLock.lock();
-            // 4.判断是否获得锁成功
-            if (!isLock) {
-                // 获取锁失败，直接返回失败或者重试
-                log.error("不允许重复下单！");
-                return;
-            }
-            try {
-				//注意：由于是spring的事务是放在threadLocal中，此时的是多线程，事务会失效
-                proxy.createVoucherOrder(voucherOrder);
-            } finally {
-                // 释放锁
-                redisLock.unlock();
-            }
+
+        private void handleVoucherOrder(VoucherOrder voucherOrder) {
+             //1.获取用户
+             Long userId = voucherOrder.getUserId();
+             // 2.创建锁对象
+             RLock redisLock = redissonClient.getLock("lock:order:" + userId);
+             // 3.尝试获取锁
+             boolean isLock = redisLock.lock();
+             // 4.判断是否获得锁成功
+             if (!isLock) {
+                 // 获取锁失败，直接返回失败或者重试
+                 log.error("不允许重复下单！");
+                 return;
+             }
+             try {		//注意：由于是spring的事务是放在threadLocal中，此时的是多线程，事务会失效
+                 proxy.createVoucherOrder(voucherOrder);
+             } finally {
+                 // 释放锁
+                 redisLock.unlock();
+             }
+        }
     }
-     //a
+   
 	private BlockingQueue<VoucherOrder> orderTasks =new  ArrayBlockingQueue<>(1024 * 1024);
 
     @Override
     public Result seckillVoucher(Long voucherId) {
         Long userId = UserHolder.getUser().getId();
-        long orderId = redisIdWorker.nextId("order");
         // 1.执行lua脚本
         Long result = stringRedisTemplate.execute(
                 SECKILL_SCRIPT,
@@ -3518,12 +3663,12 @@ private void init() {
         // 2.6.放入阻塞队列
         orderTasks.add(voucherOrder);
         //3.获取代理对象
-         proxy = (IVoucherOrderService)AopContext.currentProxy();
+        proxy = (IVoucherOrderService)AopContext.currentProxy();
         //4.返回订单id
         return Result.ok(orderId);
     }
      
-      @Transactional
+	@Transactional
     public  void createVoucherOrder(VoucherOrder voucherOrder) {
         Long userId = voucherOrder.getUserId();
         // 5.1.查询订单
@@ -3580,13 +3725,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private BlockingQueue<VoucherOrder> orderTasks = new ArrayBlockingQueue<>(1024 * 1024);
     //异步处理线程池
     public static final ExecutorService SECKILL_ORDER_EXECUTOR = Executors.newSingleThreadExecutor();
+    private IVoucherOrderService proxy;
+    
     //在类初始化之后执行，因为当这个类初始化好了之后，随时都是有可能要执行的
     @PostConstruct
     private void init(){
         SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
     }
-
-    private IVoucherOrderService proxy;
     
     // 用于线程池处理的任务
     // 当初始化完毕后，就会去从对列中去拿信息
@@ -3608,12 +3753,23 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     
     @Transactional
     public void handleVoucherOrder(VoucherOrder voucherOrder) {
-        // 扣减库存
-        seckillVoucherService.update()
-                .setSql("stock = stock - 1") // set stock = stock - 1
-                .eq("voucher_id", voucherOrder.getVoucherId()).gt("stock", 0) // where id = ? and stock > 0
+        //判断是否已经下过订单（起始lua脚本中已经判断过一遍了）
+        Integer count = query().eq("voucher_id", voucherOrder.getVoucherId()).eq("user_id", voucherOrder.getUserId()).count();
+        if(count > 0) {
+            log.error("不能重复下单，订单：" + voucherOrder.toString());
+            return;
+        }
+        //扣减库存
+        boolean success = seckillVoucherService.update()
+                .setSql("stock = stock - 1")
+                .eq("voucher_id", voucherOrder.getVoucherId())
+                .gt("stock", 0)
                 .update();
-        // 保存订单
+        if(!success) {
+            log.error("库存不足，订单：" + voucherOrder.toString());
+            return;
+        }
+        //下单
         this.save(voucherOrder);
     }
 
@@ -3700,7 +3856,116 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 }
 ```
 
+**生成tokens.txt文件并且存入redis测试代码：**
 
+```java
+package com.hmdp;
+
+import cn.hutool.core.lang.Assert;
+import cn.hutool.core.thread.ThreadUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hmdp.dto.LoginFormDTO;
+import com.hmdp.dto.Result;
+import com.hmdp.entity.User;
+import com.hmdp.service.IUserService;
+import lombok.SneakyThrows;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+
+import javax.annotation.Resource;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
+@SpringBootTest
+@AutoConfigureMockMvc
+class VoucherOrderControllerTest {
+
+    @Resource
+    private MockMvc mockMvc;
+
+    @Resource
+    private IUserService userService;
+
+    @Resource
+    private ObjectMapper mapper;
+
+    @Test
+    @SneakyThrows
+    @DisplayName("登录1000个用户，并输出到文件中")
+    void login() {
+        List<String> phoneList = userService.lambdaQuery()
+                .select(User::getPhone)
+                .last("limit 1000")
+                .list().stream().map(User::getPhone).collect(Collectors.toList());
+        ExecutorService executorService = ThreadUtil.newExecutor(phoneList.size());
+        List<String> tokenList = new CopyOnWriteArrayList<>();
+        CountDownLatch countDownLatch = new CountDownLatch(phoneList.size());
+        phoneList.forEach(phone -> {
+            executorService.execute(() -> {
+                try {
+                    // 验证码
+                    String codeJson = mockMvc.perform(MockMvcRequestBuilders
+                                    .post("/user/code")
+                                    .queryParam("phone", phone))
+                            .andExpect(MockMvcResultMatchers.status().isOk())
+                            .andReturn().getResponse().getContentAsString();
+                    Result result = mapper.readerFor(Result.class).readValue(codeJson);
+                    Assert.isTrue(result.getSuccess(), String.format("获取“%s”手机号的验证码失败", phone));
+                    String code = result.getData().toString();
+                    LoginFormDTO formDTO = LoginFormDTO.builder().code(code).phone(phone).build();
+                    String json = mapper.writeValueAsString(formDTO);
+                    // token
+                    String tokenJson = mockMvc.perform(MockMvcRequestBuilders
+                                    .post("/user/login").content(json).contentType(MediaType.APPLICATION_JSON))
+                            .andExpect(MockMvcResultMatchers.status().isOk())
+                            .andReturn().getResponse().getContentAsString();
+                    result = mapper.readerFor(Result.class).readValue(tokenJson);
+                    Assert.isTrue(result.getSuccess(), String.format("获取“%s”手机号的token失败,json为“%s”", phone, json));
+                    String token = result.getData().toString();
+                    tokenList.add(token);
+                    countDownLatch.countDown();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+        });
+        countDownLatch.await();
+        executorService.shutdown();
+        Assert.isTrue(tokenList.size() == phoneList.size());
+        writeToTxt(tokenList, "\\tokens.txt");
+        System.out.println("写入完成！");
+    }
+
+    private static void writeToTxt(List<String> list, String suffixPath) throws Exception {
+        // 1. 创建文件
+        File file = new File(System.getProperty("user.dir") + "\\src\\main\\resources" + suffixPath);
+        if (!file.exists()) {
+            file.createNewFile();
+        }
+        // 2. 输出
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8));
+        for (String content : list) {
+            bw.write(content);
+            bw.newLine();
+        }
+        bw.close();
+        System.out.println("写入完成！");
+    }
+}
+```
 
 **小总结：**
 
@@ -3718,8 +3983,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 * 先利用Redis完成库存余量、一人一单判断，完成抢单业务
 * 再将下单业务放入阻塞队列，利用独立线程异步下单
 * 基于阻塞队列的异步秒杀存在哪些问题？
-  * 内存限制问题
-  * 数据安全问题
+  * 内存限制问题：阻塞队列容量有限制，但是不限制容量又容易内存溢出
+  * 数据安全问题：宕机后业务丢失
 
 > 所以秒杀继续优化： 将阻塞队列换为消息队列
 
@@ -3911,13 +4176,31 @@ XREADGROUP GROUP group consumer [COUNT count] [BLOCK milliseconds] [NOACK] STREA
 redis> XGROUP create stream.orders g1 0 mkstream
 ```
 
-修改lua表达式,新增3.6 
+修改lua表达式,新增1.3和3.6：
 
-![1656082824939](image/Redis实战篇.assets/1656082824939.png)
+```lua
+-- 1.3.订单id
+local orderId = ARGV[3]
+
+
+-- 3.6.发送消息到队列中， XADD stream.orders * k1 v1 k2 v2 ...
+redis.call('xadd', 'stream.orders', '*', 'userId', userId, 'voucherId', voucherId, 'id', orderId)
+```
 
 VoucherOrderServiceImpl
 
 ```java
+//修改秒杀的方法seckillVoucher()：
+Long orderId = redisIdWorker.nextId("order");	//orderId挪到前面
+Long result = stringRedisTemplate.execute(
+        SECKILL_SCRIPT,
+        Collections.emptyList(),
+        voucherId.toString(),
+        userId.toString(),
+        orderId.toString()	//新增一个参数
+);
+
+//修改内部类VoucherOrderHandler：
 private class VoucherOrderHandler implements Runnable {
 
     @Override
@@ -4028,6 +4311,32 @@ public class UploadController {
         }
     }
 
+    @GetMapping("/blog/delete")
+    public Result deleteBlogImg(@RequestParam("name") String filename) {
+        File file = new File(SystemConstants.IMAGE_UPLOAD_DIR, filename);
+        if (file.isDirectory()) {
+            return Result.fail("错误的文件名称");
+        }
+        FileUtil.del(file);
+        return Result.ok();
+    }
+
+    private String createNewFileName(String originalFilename) {
+        // 获取后缀
+        String suffix = StrUtil.subAfter(originalFilename, ".", true);
+        // 生成目录
+        String name = UUID.randomUUID().toString();
+        int hash = name.hashCode();
+        int d1 = hash & 0xF;
+        int d2 = (hash >> 4) & 0xF;
+        // 判断目录是否存在
+        File dir = new File(SystemConstants.IMAGE_UPLOAD_DIR, StrUtil.format("/blogs/{}/{}", d1, d2));
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        // 生成文件名
+        return StrUtil.format("/blogs/{}/{}/{}.{}", d1, d2, name, suffix);
+    }
 }
 ```
 
@@ -4064,9 +4373,21 @@ public class BlogController {
 
 实现代码：
 
+BlogController
+
+```java
+@GetMapping("/{id}")
+public Result queryBlogById(@PathVariable("id") Long id) {
+    return blogService.queryBlogById(id);
+}
+```
+
 BlogServiceImpl
 
 ```java
+@Resource
+private IUserService userService;
+
 @Override
 public Result queryBlogById(Long id) {
     // 1.查询blog
@@ -4079,6 +4400,13 @@ public Result queryBlogById(Long id) {
   
     return Result.ok(blog);
 }
+
+private void queryBlogUser(Blog blog) {
+    Long userId = blog.getUserId();
+    User user = userService.getById(userId);
+    blog.setName(user.getNickName());
+    blog.setIcon(user.getIcon());
+}
 ```
 
 ## 8.3 达人探店-点赞功能
@@ -4086,7 +4414,7 @@ public Result queryBlogById(Long id) {
 初始代码
 
 ```java
-@GetMapping("/likes/{id}")
+@GetMapping("/like/{id}")
 public Result queryBlogLikes(@PathVariable("id") Long id) {
     //修改点赞数量
     blogService.update().setSql("liked = liked +1 ").eq("id",id).update();
@@ -4129,8 +4457,40 @@ private Boolean isLike;
 
 2、修改代码
 
+BlogContrller
+
 ```java
- @Override
+ 	@PutMapping("/like/{id}")
+    public Result likeBlog(@PathVariable("id") Long id) {
+        return blogService.likeBlog(id);
+    }
+```
+
+BlogServiceImpl
+
+```java
+	@Override
+    public Result queryHotBlog(Integer current) {
+		...
+        //修改forEach
+        records.forEach(blog -> {
+            //查询blog有关的用户
+            this.queryBlogUser(blog);
+            //查询该blog自己是否点赞
+            this.isBlogLiked(blog);	
+        });
+		...
+    }
+
+	@Override
+    public Result queryBlogById(Long id) {
+        ...
+        //查询该blog自己是否点赞
+        this.isBlogLiked(blog);		//新增
+        ...
+    }
+
+	@Override
     public Result likeBlog(Long id){
         // 1.获取登录用户
         Long userId = UserHolder.getUser().getId();
@@ -4154,6 +4514,19 @@ private Boolean isLike;
                 stringRedisTemplate.opsForSet().remove(key,userId.toString());
             }
         }
+        return Result.ok();
+    }
+
+	private void isBlogLiked(Blog blog) {
+        UserDTO user = UserHolder.getUser();
+        if(user == null) {
+            return;
+        }
+        Long userId = user.getId();
+        String key = RedisConstants.BLOG_LIKED_KEY + blog.getId();
+        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
+        blog.setIsLike(score != null);
+    }
 ```
 
 ## 8.4 达人探店-点赞排行榜
@@ -4177,6 +4550,8 @@ private Boolean isLike;
 BlogServiceImpl
 
 点赞逻辑代码
+
+> 把前一节中的 对set 的操作都先改为对 zset 的操作
 
 ```java
    @Override
@@ -4250,7 +4625,7 @@ public Result queryBlogLikes(Long id) {
     String idStr = StrUtil.join(",", ids);
     // 3.根据用户id查询用户 WHERE id IN ( 5 , 1 ) ORDER BY FIELD(id, 5, 1)
     List<UserDTO> userDTOS = userService.query()
-            .in("id", ids).last("ORDER BY FIELD(id," + idStr + ")").list()
+            .in("id", ids).last("ORDER BY FIELD(id," + idStr + ")").list()//因为mysql用in查询出来的是倒序，所以用order by正过来
             .stream()
             .map(user -> BeanUtil.copyProperties(user, UserDTO.class))
             .collect(Collectors.toList());
@@ -4298,39 +4673,34 @@ public Result isFollow(@PathVariable("id") Long followUserId) {
 FollowService
 
 ```java
-取消关注service
 @Override
 public Result isFollow(Long followUserId) {
-        // 1.获取登录用户
-        Long userId = UserHolder.getUser().getId();
-        // 2.查询是否关注 select count(*) from tb_follow where user_id = ? and follow_user_id = ?
-        Integer count = query().eq("user_id", userId).eq("follow_user_id", followUserId).count();
-        // 3.判断
-        return Result.ok(count > 0);
+    // 1.获取登录用户
+    Long userId = UserHolder.getUser().getId();
+    // 2.查询是否关注 select count(*) from tb_follow where user_id = ? and follow_user_id = ?
+    Integer count = query().eq("user_id", userId).eq("follow_user_id", followUserId).count();
+    // 3.判断
+    return Result.ok(count > 0);
+}
+
+@Override
+public Result follow(Long followUserId, Boolean isFollow) {
+    // 1.获取登录用户
+    Long userId = UserHolder.getUser().getId();
+    // 1.判断到底是关注还是取关
+    if (isFollow) {
+        // 2.关注，新增数据
+        Follow follow = new Follow();
+        follow.setUserId(userId);
+        follow.setFollowUserId(followUserId);
+        save(follow);
+    } else {
+        // 3.取关，删除 delete from tb_follow where user_id = ? and follow_user_id = ?
+        remove(new QueryWrapper<Follow>()
+                .eq("user_id", userId).eq("follow_user_id", followUserId));
     }
-
- 关注service
- @Override
-    public Result follow(Long followUserId, Boolean isFollow) {
-        // 1.获取登录用户
-        Long userId = UserHolder.getUser().getId();
-        String key = "follows:" + userId;
-        // 1.判断到底是关注还是取关
-        if (isFollow) {
-            // 2.关注，新增数据
-            Follow follow = new Follow();
-            follow.setUserId(userId);
-            follow.setFollowUserId(followUserId);
-            boolean isSuccess = save(follow);
-
-        } else {
-            // 3.取关，删除 delete from tb_follow where user_id = ? and follow_user_id = ?
-            remove(new QueryWrapper<Follow>()
-                    .eq("user_id", userId).eq("follow_user_id", followUserId));
-
-        }
-        return Result.ok();
-    }
+    return Result.ok();
+}
 ```
 
 ## 9.2 好友关注-共同关注
@@ -4473,9 +4843,7 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 * 缺点：如果算法不精准，可能起到反作用
   本例中的个人页面，是基于关注的好友来做Feed流，因此采用Timeline的模式。该模式的实现方案有三种：
 
-我们本次针对好友的操作，采用的就是Timeline的方式，只需要拿到我们关注用户的信息，然后按照时间排序即可
-
-，因此采用Timeline的模式。该模式的实现方案有三种：
+我们本次针对好友的操作，采用的就是Timeline的方式，只需要拿到我们关注用户的信息，然后按照时间排序即可，因此采用Timeline的模式。该模式的实现方案有三种：
 
 * 拉模式
 * 推模式
@@ -4487,7 +4855,7 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 
 优点：比较节约空间，因为赵六在读信息时，并没有重复读取，而且读取完之后可以把他的收件箱进行清楚。
 
-缺点：比较延迟，当用户读取数据时才去关注的人里边去读取数据，假设用户关注了大量的用户，那么此时就会拉取海量的内容，对服务器压力巨大。
+缺点：**比较延迟**，当用户读取数据时才去关注的人里边去读取数据，假设用户关注了大量的用户，那么此时就会拉取海量的内容，对服务器压力巨大。
 
 ![1653809450816](image/Redis实战篇.assets/1653809450816.png)
 
@@ -4499,7 +4867,7 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 
 优点：时效快，不用临时拉取
 
-缺点：内存压力大，假设一个大V写信息，很多人关注他， 就会写很多分数据到粉丝那边去
+缺点：**内存压力大**，假设一个大V写信息，很多人关注他， 就会写很多分数据到粉丝那边去
 
 ![1653809875208](image/Redis实战篇.assets/1653809875208.png)
 
@@ -4510,6 +4878,8 @@ Timeline：不做内容筛选，简单的按照内容发布时间排序，常用
 ![1653812346852](image/Redis实战篇.assets/1653812346852.png)
 
 
+
+![image-20240120195705841](image/Redis实战篇.assets/image-20240120195705841.png)
 
 ## 9.4 好友关注-推送到粉丝收件箱
 
@@ -4523,11 +4893,11 @@ Feed流中的数据会不断更新，所以数据的角标也在变化，因此�
 
 传统了分页在feed流是不适用的，因为我们的数据会随时发生变化
 
-假设在t1 时刻，我们去读取第一页，此时page = 1 ，size = 5 ，那么我们拿到的就是10~6 这几条记录，假设现在t2时候又发布了一条记录，此时t3 时刻，我们来读取第二页，读取第二页传入的参数是page=2 ，size=5 ，那么此时读取到的第二页实际上是从6 开始，然后是6~2 ，那么我们就读取到了重复的数据，所以feed流的分页，不能采用原始方案来做。
+假设在t1 时刻，我们去读取第一页，此时page = 1 ，size = 5 ，那么我们拿到的就是10~6 这几条记录，假设现在t2时候又发布了一条记录，此时t3 时刻，我们来读取第二页，读取第二页传入的参数是page=2 ，size=5 ，那么此时读取到的第二页实际上是从6 开始，然后是6~2 ，那么我们就读取到了重复的数据，所以feed流的分页，**不能采用原始方案来做。**
 
 ![1653813047671](image/Redis实战篇.assets/1653813047671.png)
 
-Feed流的滚动分页
+**Feed流的滚动分页**
 
 我们需要记录每次操作的最后一条，然后从这个位置开始去读取数据
 
@@ -4563,9 +4933,28 @@ public Result saveBlog(Blog blog) {
 }
 ```
 
-## 9.5好友关注-实现分页查询收邮箱
+## 9.5好友关注-Feed流实现滚动分页查询收邮箱
 
 需求：在个人主页的“关注”卡片中，查询并展示推送的Blog信息：
+
+**我们需要使用ZSet的ZREVRANGEBYSCORES命令进行滚动分页的查询**
+
+```shell
+ZREVRANGEBYSCORE key max min WITHSCORES LIMIT offset count
+```
+
+| 指令             | 是否必须 | 说明                                                    |
+| ---------------- | -------- | ------------------------------------------------------- |
+| ZREVRANGEBYSCORE | 是       | 指令                                                    |
+| key              | 是       | 有序集合键名称                                          |
+| max              | 是       | 最大分数值,可使用"+inf"代替                             |
+| min              | 是       | 最小分数值,可使用"-inf"代替                             |
+| WITHSCORES       | 否       | 将成员分数一并返回                                      |
+| LIMIT            | 否       | 返回结果是否分页,指令中包含LIMIT后offset、count必须输入 |
+| offset           | 否       | 返回结果起始位置（偏移量）                              |
+| count            | 否       | 返回结果数量                                            |
+
+所以我们需要max（lastId，第一次时为当前时间戳）、offset（最小的时间戳相同的个数就是跳过的偏移量）这两个参数
 
 具体操作如下：
 
@@ -4633,6 +5022,7 @@ public Result queryBlogOfFollow(Long max, Integer offset) {
             os = 1;
         }
     }
+    //若是整页都与上一页的最小值的score相等，则跳过的数量还需增加
 	os = minTime == max ? os : os + offset;
     // 5.根据id查询blog
     String idStr = StrUtil.join(",", ids);
@@ -4669,7 +5059,7 @@ GEO就是Geolocation的简写形式，代表地理坐标。Redis在3.2版本中�
 * GEOSEARCH：在指定范围内搜索member，并按照与指定点之间的距离排序后返回。范围可以是圆形或矩形。6.2.新功能
 * GEOSEARCHSTORE：与GEOSEARCH功能一致，不过可以把结果存储到一个指定的key。 6.2.新功能
 
-> GEO底层使用的是ZSET，讲member转换为value，经纬坐标转换为score
+> GEO底层使用的是ZSET，将member转换为value，经纬坐标转换为score
 
 ## 10.2、 附近商户-导入店铺数据到GEO
 
@@ -4771,7 +5161,7 @@ public Result queryShopByType(
 ShopServiceImpl
 
 ```java
-@Override
+	@Override
     public Result queryShopByType(Integer typeId, Integer current, Double x, Double y) {
         // 1.判断是否需要根据坐标查询
         if (x == null || y == null) {
@@ -4986,6 +5376,14 @@ public Result signCount() {
     }
     return Result.ok(count);
 }
+```
+
+计算连续天数的方法2：将num转为二进制串
+
+```java
+//记录连续签到次数
+String binaryStr = Long.toBinaryString(num);
+int count = binaryStr.length() - binaryStr.lastIndexOf("0", dayOfMonth) - 1;
 ```
 
 ### 11.4 额外加餐-关于使用bitmap来解决缓存穿透的方案

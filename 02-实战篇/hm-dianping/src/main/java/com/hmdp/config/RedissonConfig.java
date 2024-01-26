@@ -14,7 +14,7 @@ public class RedissonConfig {
         // 配置
         Config config = new Config();
         // 若是集群使用useClusterServers()
-        config.useSingleServer().setAddress("redis://47.115.207.49:6379").setPassword("zw2635879218@");
+        config.useSingleServer().setAddress("redis://47.120.12.106:6379").setPassword("zw2635879218@");
         // 创建RedissonClient对象
         return Redisson.create(config);
     }
