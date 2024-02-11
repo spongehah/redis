@@ -101,6 +101,15 @@ Caffeine的性能非常好，下图是官方给出的性能对比：
 
 ### 2.2.1.Caffeine基本API
 
+引入依赖：
+
+```xml
+<dependency>
+    <groupId>com.github.ben-manes.caffeine</groupId>
+    <artifactId>caffeine</artifactId>
+</dependency>
+```
+
 缓存使用的基本API：
 
 ```java

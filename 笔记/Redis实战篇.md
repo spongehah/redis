@@ -2827,6 +2827,17 @@ public void unlock() {
 全部代码
 
 ```java
+package org.idea.qiyu.live.framework.redis.starter.lock;
+
+import cn.hutool.core.lang.UUID;
+import cn.hutool.core.util.BooleanUtil;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+
+import java.util.Collections;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Redis分布式锁setnx实现，适用于大多数情况，解决了误删锁问题和原子性问题
  * 但还存在以下问题：
@@ -2834,7 +2845,7 @@ public void unlock() {
  *      不可重试
  *      超时释放
  *      主从一致性
- * 如需解决这些极低概率问题，请使用Redisson
+ * 如需解决这些极低概率问题，请使用Redission
  * 
  *  <!--hutool-->
  *  <dependency>
@@ -2855,6 +2866,15 @@ public void unlock() {
  *      * /
  *      void unlock();
  *  }
+ *  
+ *  unlock.lua:（新建在resources目录下）
+ *  -- 这里的 KEYS[1] 就是锁的key，这里的ARGV[1] 就是当前线程标示
+ *  -- 获取锁中的标示，判断是否与当前线程标示一致
+ *  if (redis.call('GET', KEYS[1]) == ARGV[1]) then
+ *    -- 一致，则删除锁
+ *    return redis.call('DEL', KEYS[1])
+ *  end
+ *  -- 不一致，则直接返回
  */
 public class SimpleRedisLock implements ILock{
     public static final String KEY_PREFIX = "lock:";
@@ -3078,7 +3098,7 @@ public Result seckillVoucher(Long voucherId) {
 
 ## 5.3 分布式锁-redission可重入锁原理
 
-在Lock锁中，他是借助于底层的一个voaltile的一个state变量来记录重入的状态的，比如当前没有人持有这把锁，那么state=0，假如有人持有这把锁，那么state=1，如果持有这把锁的人再次持有这把锁，那么state就会+1 ，如果是对于synchronized而言，他在c语言代码中会有一个count，原理和state类似，也是重入一次就加一，释放一次就-1 ，直到减少成0 时，表示当前这把锁没有被人持有。  
+在Lock锁中，他是借助于底层的一个voaltile的一个state变量来记录重入的状态的，比如当前没有人持有这把锁，那么state=0，假如有人持有这把锁，那么state=1，如果持有这把锁的人再次持有这把锁，那么state就会+1 ，如果是对于synchronized而言，他在c语言代码中会有一个count，原理和state类似，也是重入一次就加一，释放一次就-1 ，直到减少成0 时，表示当前这把锁没有被人持有。
 
 ![1653548087334](image/Redis实战篇.assets/1653548087334.png)
 
@@ -5221,7 +5241,7 @@ ShopServiceImpl
 
 # 11、用户签到
 
-### 11.1、用户签到-BitMap功能演示
+## 11.1、用户签到-BitMap功能演示
 
 我们针对签到功能完全可以通过mysql来完成，比如说以下这张表
 
@@ -5253,7 +5273,7 @@ BitMap的操作命令有：
 * BITOP ：将多个BitMap的结果做位运算（与 、或、异或）
 * BITPOS ：查找bit数组中指定范围内第一个0或1出现的位置
 
-### 11.2 、用户签到-实现签到功能
+## 11.2 、用户签到-实现签到功能
 
 需求：实现签到接口，将当前用户当天签到信息保存到Redis中
 
@@ -5294,7 +5314,7 @@ public Result sign() {
 }
 ```
 
-### 11.3 用户签到-签到统计
+## 11.3 用户签到-签到统计
 
 **问题1：**什么叫做连续签到天数？
 从最后一次签到开始向前统计，直到遇到第一次未签到为止，计算总的签到次数，就是连续签到天数。
@@ -5386,7 +5406,7 @@ String binaryStr = Long.toBinaryString(num);
 int count = binaryStr.length() - binaryStr.lastIndexOf("0", dayOfMonth) - 1;
 ```
 
-### 11.4 额外加餐-关于使用bitmap来解决缓存穿透的方案
+## 11.4 额外加餐-关于使用bitmap来解决缓存穿透的方案
 
 回顾**缓存穿透**：
 

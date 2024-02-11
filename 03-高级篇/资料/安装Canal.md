@@ -138,7 +138,7 @@ docker run -p 11111:11111 --name canal \
 - `-e canal.instance.master.address=mysql:3306`：数据库地址和端口，如果不知道mysql容器地址，可以通过`docker inspect 容器id`来查看
 - `-e canal.instance.dbUsername=canal`：数据库用户名
 - `-e canal.instance.dbPassword=canal` ：数据库密码
-- `-e canal.instance.filter.regex=`：要监听的表名称
+- `-e canal.instance.filter.regex=`：要监听的表名称,heima是数据库名
 
 表名称监听支持的语法：
 

@@ -581,7 +581,7 @@ public LettuceClientConfigurationBuilderCustomizer clientConfigurationBuilderCus
 - MASTER：从主节点读取
 - MASTER_PREFERRED：优先从master节点读取，master不可用才读取replica
 - REPLICA：从slave（replica）节点读取
-- REPLICA _PREFERRED：优先从slave（replica）节点读取，所有的slave都不可用才读取master
+- REPLICA_PREFERRED：优先从slave（replica）节点读取，所有的slave都不可用才读取master
 
 
 
@@ -659,6 +659,14 @@ Redis会把每一个master节点映射到0~16383共16384个插槽（hash slot）
 
 
 ### 4.3.2.槽位映射算法：一致性哈希算法
+
+> 修正：Redis Cluster使用的是哈希槽算法，在集群数量发生改变时，手动进行哈希槽的分配
+> 理由:
+>
+> 1. 哈希槽算法更简单
+> 2. 哈希槽算法可以根据机器的配置手动分配，一致性哈希不好手动分配
+>
+> 但是一致性哈希也有优点：比如下面所说的**缓存抖动**现象，即将数据添加到后一台机器上，而使用哈希槽会导致那部分槽位不可用
 
 要将数据缓存在集群的哪一台节点上，采用哈希算法，这里有两种哈希算法：
 
