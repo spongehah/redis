@@ -917,6 +917,36 @@ Redis底层分配并不是这个key有多大，他就会分配多大，而是有
 
 
 
+### 6.1 Redis内存碎片问题
+
+1. Redis为什么会有内存碎片？
+
+   - Redis 存储数据的时候向操作系统申请的内存空间可能会大于数据实际需要的存储空间。比如SDS分配时使用jmalloc分配2的幂次方
+   - 频繁修改 Redis 中的数据也会产生内存碎片。
+   - （操作系统分配的内存少于128K时使用brk()函数，回收后会放入内存池）
+
+2. 如何查看 Redis 内存碎片的信息？
+
+   - info memory
+
+3. 如何清理 Redis 内存碎片？
+
+   - ```shell
+     config set activedefrag yes
+     
+     # 内存碎片占用空间达到 500mb 的时候开始清理
+     config set active-defrag-ignore-bytes 500mb
+     # 内存碎片率大于 1.5 的时候开始清理
+     config set active-defrag-threshold-lower 50
+     
+     # 内存碎片清理所占用 CPU 时间的比例不低于 20%
+     config set active-defrag-cycle-min 20
+     # 内存碎片清理所占用 CPU 时间的比例不高于 50%
+     config set active-defrag-cycle-max 50
+     ```
+
+
+
 # 7、服务器端集群优化-集群还是主从
 
 集群虽然具备高可用特性，能实现自动故障恢复，但是如果使用不当，也会存在一些问题：
